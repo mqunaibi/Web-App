@@ -7,7 +7,7 @@ import os
 from api_handler import execute_query
 
 load_dotenv()
-
+SECRET_KEY = os.getenv("SECRET_KEY")
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "mysecret")
 
