@@ -1,0 +1,48 @@
+.tabs {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  gap: 1rem;
+}
+
+.tab-item {
+  position: relative;
+  padding: 0.5rem 1rem;
+  background: #f0f0f0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.tab-item:hover {
+  background-color: #ddd;
+}
+
+.tab-item .counter {
+  position: absolute;
+  top: -0.5rem;
+  right: -0.5rem;
+  width: 1.6em;
+  height: 1.6em;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8em;
+  font-weight: bold;
+  color: #fff;
+  background-color: gray;
+}
+
+.tab-item.waiting .counter {
+  background-color: red;
+}
+
+.tab-item.approved .counter {
+  background-color: green;
+}
+
+.tab-item.rejected .counter {
+  background-color: blue;
+}

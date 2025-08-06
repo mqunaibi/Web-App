@@ -32,6 +32,34 @@
   <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js">
   </script>
   <style>
+.tab-item {
+  position: relative;
+}
+.tab-item .counter {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: gray;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.tab-item.waiting .counter {
+  background-color: red;
+}
+.tab-item.approved .counter {
+  background-color: green;
+}
+.tab-item.rejected .counter {
+  background-color: blue;
+}
+
    body {
     background-color: #f8f9fa;
   }
@@ -148,30 +176,18 @@
    </div>
    <ul class="nav nav-tabs" id="userTab" role="tablist">
     <li class="nav-item" role="presentation">
-     <button class="nav-link active" data-bs-target="#pending" data-bs-toggle="tab" id="pending-tab" role="tab" type="button">
-      Pending (
-      <span id="pending-count">
-       0
-      </span>
-      )
+     <button class="nav-link active tab-item waiting" data-bs-target="#pending" data-bs-toggle="tab" id="pending-tab" role="tab" type="button">
+      Pending <span class="counter" id="pending-count">0</span>
      </button>
     </li>
     <li class="nav-item" role="presentation">
-     <button class="nav-link" data-bs-target="#approved" data-bs-toggle="tab" id="approved-tab" role="tab" type="button">
-      Approved (
-      <span id="approved-count">
-       0
-      </span>
-      )
+     <button class="nav-link tab-item approved" data-bs-target="#approved" data-bs-toggle="tab" id="approved-tab" role="tab" type="button">
+      Approved <span class="counter" id="approved-count">0</span>
      </button>
     </li>
     <li class="nav-item" role="presentation">
-     <button class="nav-link" data-bs-target="#rejected" data-bs-toggle="tab" id="rejected-tab" role="tab" type="button">
-      Rejected (
-      <span id="rejected-count">
-       0
-      </span>
-      )
+     <button class="nav-link tab-item rejected" data-bs-target="#rejected" data-bs-toggle="tab" id="rejected-tab" role="tab" type="button">
+      Rejected <span class="counter" id="rejected-count">0</span>
      </button>
     </li>
    </ul>

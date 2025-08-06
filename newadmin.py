@@ -18,7 +18,14 @@ def require_login():
 # 
 @newadmin_bp.route("/newadmin")
 def newadmin_page():
-    return render_template("newadmin.html")
+    pending_users = get_pending_users() or []
+    approved_users = get_approved_users() or []
+    rejected_users = get_rejected_users() or []
+
+    return render_template("newadmin.html",
+                           pending_count=len(pending_users),
+                           approved_count=len(approved_users),
+                           rejected_count=len(rejected_users))
 
 # (pending + approved + rejected)
 @newadmin_bp.route("/newadmin_data")
