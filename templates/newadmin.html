@@ -37,20 +37,28 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 8px 14px;
+  margin-top: 8px;
+  overflow: visible;
+  line-height: 1;
+  position: relative;
 }
 
 .tab-item .counter {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
   border-radius: 50%;
   background-color: gray;
   color: white;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: bold;
-  display: flex;
-  align-items: center;
+  display: inline-flex;
   justify-content: center;
+  align-items: center;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .tab-item.waiting .counter {
