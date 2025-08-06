@@ -34,6 +34,73 @@
   <style>
 .tab-item {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 10px !important;
+  padding-left: 10px !important;
+  overflow: visible;
+}
+
+.tab-item .counter {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  border-radius: 50%;
+  background-color: gray;
+  color: white;
+  font-size: 13px;
+  font-weight: bold;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  line-height: 1;
+}
+
+.tab-item.waiting .counter {
+  background-color: red;
+}
+.tab-item.approved .counter {
+  background-color: green;
+}
+.tab-item.rejected .counter {
+  background-color: blue;
+}
+
+.tab-item {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.tab-item .counter {
+  position: static;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: gray;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.tab-item.waiting .counter {
+  background-color: red;
+}
+.tab-item.approved .counter {
+  background-color: green;
+}
+.tab-item.rejected .counter {
+  background-color: blue;
+}
+
+.tab-item {
+  position: relative;
 }
 .tab-item .counter {
   position: absolute;
