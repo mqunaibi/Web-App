@@ -1,0 +1,67 @@
+from flask import Blueprint, render_template, session, redirect, url_for, request, jsonify
+from api_handler import (
+    get_pending_users, get_approved_users, get_rejected_users,
+    approve_user, reject_user, delete_user
+)
+
+newadmin_bp = Blueprint("newadmin", __name__)
+
+#  Blueprint
+@newadmin_bp.before_request
+def require_login():
+    # 
+    if request.path == "/login":
+        return
+    if not session.get("logged_in"):
+        return redirect("/login")
+
+# 
+@newadmin_bp.route("/newadmin")
+def newadmin_page():
+    return render_template("newadmin.html")
+
+# (pending + approved + rejected)
+@newadmin_bp.route("/newadmin_data")
+def admin_data():
+    return jsonify({
+        "pending_users": format_users(get_pending_users() or []),
+        "approved_users": format_users(get_approved_users() or []),
+        "rejected_users": format_users(get_rejected_users() or [])
+    })
+
+# 
+@newadmin_bp.route("/newapprove/<email>", methods=["POST"])
+def newapprove(email):
+    result = approve_user(email)
+    return jsonify({"success": result is True, "message": str(result)})
+
+# 
+@newadmin_bp.route("/newreject/<email>", methods=["POST"])
+def newreject(email):
+    result = reject_user(email)
+    return jsonify({"success": result is True, "message": str(result)})
+
+# 
+@newadmin_bp.route("/newdelete_user/<email>")
+def newdelete_user(email):
+    result = delete_user(email)
+    return jsonify({"success": result is True, "message": str(result)})
+
+# 
+@newadmin_bp.route("/logout")
+def logout():
+    session.pop("logged_in", None)
+    return redirect("/login")
+
+def format_users(users):
+    return [
+        {
+            "email": user["email"],
+            "phone": user["phone"],
+            "device_name": user.get("device_name", "N/A"),
+            "device_type": user.get("device_type", "N/A"),
+            "ip_address": user.get("ip_address", "N/A"),
+            "registered_at": user.get("created_at", "N/A"),
+            "device_uuid": user.get("device_uuid", "N/A")
+        } for user in users
+    ]
