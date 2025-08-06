@@ -1,10 +1,58 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Home</title>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Web-App - Welcome</title>
+    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet"/>
+    <style>
+        body {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #e0e7ff 0%, #f8fafc 100%);
+        }
+        .landing-card {
+            background: #fff;
+            border-radius: 1.5rem;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.08);
+            padding: 2.5rem 2rem;
+            text-align: center;
+            max-width: 350px;
+            width: 100%;
+        }
+        .landing-card h1 {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 1rem;
+        }
+        .landing-card p {
+            font-size: 1.15rem;
+            color: #555;
+            margin-bottom: 2rem;
+        }
+        .btn-main {
+            font-size: 1.15rem;
+            border-radius: 2rem;
+            padding: 0.75rem 2.5rem;
+        }
+        @media (max-width: 500px) {
+            .landing-card {
+                padding: 1.2rem 0.5rem;
+            }
+            .landing-card h1 {
+                font-size: 1.4rem;
+            }
+        }
+    </style>
 </head>
 <body>
-  <h1>Welcome to the Admin Panel</h1>
-  <a href="/login">Go to Login</a>
+    <div class="landing-card">
+        <!-- يمكنك إضافة شعار هنا إن أردت -->
+        <h1>Web-App</h1>
+        <p>Welcome to Web-App!<br>Manage your users and data easily.</p>
+        <a href="/login" class="btn btn-primary btn-main">Login</a>
+    </div>
 </body>
 </html>
