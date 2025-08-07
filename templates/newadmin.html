@@ -111,6 +111,40 @@
   text-align: center;
   width: 100%;
 }
+
+
+/* تحسين شكل الجداول */
+.table {
+  font-size: 0.9rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+
+.table th, .table td {
+  vertical-align: middle !important;
+  text-align: center;
+  padding: 10px 12px !important;
+}
+
+.table th {
+  background-color: #f1f1f1;
+  font-weight: bold;
+  font-size: 0.95rem;
+}
+
+.table-hover tbody tr:hover {
+  background-color: #f5faff !important;
+}
+
+@media (max-width: 576px) {
+  .table {
+    font-size: 0.8rem;
+  }
+  .table th, .table td {
+    padding: 8px 6px !important;
+  }
+}
 </style>
 </head>
 <body>
@@ -177,7 +211,7 @@
 <div class="tab-content mt-4" id="userTabContent">
 <div class="tab-pane fade show active" id="pending" role="tabpanel">
 <table class="table table-bordered table-hover align-middle" id="user-table-1">
-<thead class="table-dark">
+<thead>
 <tr>
 <th>
          Email
@@ -202,7 +236,7 @@
 </div>
 <div class="tab-pane fade" id="approved" role="tabpanel">
 <table class="table table-bordered table-hover align-middle" id="user-table-2">
-<thead class="table-success">
+<thead>
 <tr>
 <th>
          Email
@@ -227,7 +261,7 @@
 </div>
 <div class="tab-pane fade" id="rejected" role="tabpanel">
 <table class="table table-bordered table-hover align-middle" id="user-table-3">
-<thead class="table-danger">
+<thead>
 <tr>
 <th>
          Email
