@@ -93,3 +93,9 @@ def admin_add():
             flash(result, "danger")
 
     return render_template('admin_add.html')
+
+@newadmin_bp.route('/admin-dashboard')
+def admin_dashboard():
+    if 'admin_logged_in' not in session:
+        return redirect(url_for('login'))
+    return render_template('dashboard.html')
