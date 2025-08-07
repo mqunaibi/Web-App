@@ -13,7 +13,7 @@ def require_login():
     # 
     if request.path == "/login":
         return
-    if not session.get("logged_in"):
+    if not session.get("admin_logged_in"):
         return redirect("/login")
 
 # 

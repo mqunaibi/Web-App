@@ -33,7 +33,7 @@ def login():
             session["admin_logged_in"] = True
             session["admin_user"] = username
             session["admin_role"] = result[0]["role"]
-            return redirect("/newadmin")
+            return redirect("/admin-dashboard")
         else:
             error = "Invalid username or password"
 

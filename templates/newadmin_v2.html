@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+ <head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>
+   WE-APP - User Management
+  </title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js">
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/js/all.min.js">
+  </script>
+  <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet"/>
+  <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js">
+  </script>
+  <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js">
+  </script>
+  <link href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.bootstrap5.min.css" rel="stylesheet"/>
+  <script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js">
+  </script>
+  <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.bootstrap5.min.js">
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js">
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js">
+  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js">
+  </script>
+  <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js">
+  </script>
+  <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js">
+  </script>
+  <style>
+   .tab-item {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  margin-top: 8px;
+  overflow: visible;
+  line-height: 1;
+  position: relative;
+}
+
+.tab-item .counter {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  border-radius: 50%;
+  background-color: gray;
+  color: white;
+  font-size: 13px;
+  font-weight: bold;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.tab-item.waiting .counter {
+  background-color: red;
+}
+.tab-item.approved .counter {
+  background-color: green;
+}
+.tab-item.rejected .counter {
+  background-color: blue;
+}
+
+.icon-btn {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 4px;
+  margin: 0 2px;
+  font-size: 1.2rem;
+}
+
+.icon-btn .fa-trash       { color: red; }
+.icon-btn .fa-info-circle { color: black; }
+.icon-btn .fa-check       { color: green; }
+.icon-btn .fa-times       { color: red; }
+
+.top-bar {
+  background-color: #0d6efd;
+  color: white;
+  padding: 10px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+
+.top-bar h2 {
+  font-size: 1.2rem;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.notification-message {
+  display: inline-block;
+  color: #fff;
+  font-size: 0.9rem;
+  text-align: center;
+  width: 100%;
+}
+
+
+/* تحسين شكل الجداول */
+.table {
+  font-size: 0.9rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+
+.table th, .table td {
+  vertical-align: middle !important;
+  text-align: center;
+  padding: 10px 12px !important;
+}
+
+.table th {
+  background-color: #f1f1f1;
+  font-weight: bold;
+  font-size: 0.95rem;
+}
+
+.table-hover tbody tr:hover {
+  background-color: #f5faff !important;
+}
+
+@media (max-width: 576px) {
+  .table {
+    font-size: 0.8rem;
+  }
+  .table th, .table td {
+    padding: 8px 6px !important;
+  }
+}
+
+@media (max-width: 576px) {
+  .d-none.d-md-table-cell {
+    display: none !important;
+  }
+}
+  </style>
+  <link href="{{ url_for('static', filename='css/table_columns.css') }}" rel="stylesheet"/>
+ </head>
+ <body>
+  <div class="top-bar">
+   <h2>
+    WE-APP - Admin Panel
+   </h2>
+   <!-- ✅ Notification inside the top bar -->
+   <div class="flex-grow-1 px-3">
+    <span class="notification-message" id="notification">
+    </span>
+   </div>
+   <div class="d-flex align-items-center">
+    <form action="/logout" class="m-0" method="get">
+     <button class="btn btn-light btn-sm" data-bs-toggle="tooltip" title="Logout" type="submit">
+      <i class="fas fa-sign-out-alt">
+      </i>
+     </button>
+    </form>
+    <button class="btn btn-light btn-sm ms-2" data-bs-toggle="tooltip" id="refresh-btn" title="Refresh" type="button">
+     <i class="fas fa-sync-alt">
+     </i>
+    </button>
+   </div>
+  </div>
+  <div class="container py-4">
+   <div id="toolbar" style="position: sticky; top: 50px; z-index: 999; background: #ffffff; padding: 10px 0; display: flex; gap: 10px; align-items: center;">
+    <button class="btn btn-success btn-sm" id="btnExcel" title="Export to Excel">
+     <i class="fas fa-file-excel">
+     </i>
+    </button>
+    <button class="btn btn-danger btn-sm" id="btnPDF" title="Export to PDF">
+     <i class="fas fa-file-pdf">
+     </i>
+    </button>
+    <button class="btn btn-secondary btn-sm" id="btnPrint" title="Print">
+     <i class="fas fa-print">
+     </i>
+    </button>
+    <div class="ms-auto d-flex align-items-center">
+     <label class="mb-0 me-2" for="toolbarSearch">
+      Search:
+     </label>
+     <input class="form-control form-control-sm" id="toolbarSearch" placeholder="" style="width: 180px;" type="search"/>
+    </div>
+   </div>
+   <ul class="nav nav-tabs" id="userTab" role="tablist">
+    <li class="nav-item" role="presentation">
+     <button class="nav-link active tab-item waiting" data-bs-target="#pending" data-bs-toggle="tab" id="pending-tab" role="tab" type="button">
+      Pending
+      <span class="counter" id="pending-count">
+       0
+      </span>
+     </button>
+    </li>
+    <li class="nav-item" role="presentation">
+     <button class="nav-link tab-item approved" data-bs-target="#approved" data-bs-toggle="tab" id="approved-tab" role="tab" type="button">
+      Approved
+      <span class="counter" id="approved-count">
+       0
+      </span>
+     </button>
+    </li>
+    <li class="nav-item" role="presentation">
+     <button class="nav-link tab-item rejected" data-bs-target="#rejected" data-bs-toggle="tab" id="rejected-tab" role="tab" type="button">
+      Rejected
+      <span class="counter" id="rejected-count">
+       0
+      </span>
+     </button>
+    </li>
+   </ul>
+   <div class="tab-content mt-4" id="userTabContent">
+    <div class="tab-pane fade show active" id="pending" role="tabpanel">
+     <div class="table-responsive">
+      <table class="table table-bordered table-hover align-middle" id="user-table-1">
+       <thead>
+        <tr>
+         <th>
+          Email
+         </th>
+         <th>
+          Phone
+         </th>
+         <th>
+          Device Name
+         </th>
+         <th class="d-none d-md-table-cell">
+          Device UUID
+         </th>
+         <th>
+          Action
+         </th>
+        </tr>
+       </thead>
+       <tbody id="pending-users">
+       </tbody>
+      </table>
+     </div>
+    </div>
+    <div class="tab-pane fade" id="approved" role="tabpanel">
+     <div class="table-responsive">
+      <table class="table table-bordered table-hover align-middle" id="user-table-2">
+       <thead>
+        <tr>
+         <th>
+          Email
+         </th>
+         <th>
+          Phone
+         </th>
+         <th>
+          Device Name
+         </th>
+         <th class="d-none d-md-table-cell">
+          Device UUID
+         </th>
+         <th>
+          Action
+         </th>
+        </tr>
+       </thead>
+       <tbody id="approved-users">
+       </tbody>
+      </table>
+     </div>
+    </div>
+    <div class="tab-pane fade" id="rejected" role="tabpanel">
+     <div class="table-responsive">
+      <table class="table table-bordered table-hover align-middle" id="user-table-3">
+       <thead>
+        <tr>
+         <th>
+          Email
+         </th>
+         <th>
+          Phone
+         </th>
+         <th>
+          Device Name
+         </th>
+         <th class="d-none d-md-table-cell">
+          Device UUID
+         </th>
+         <th>
+          Action
+         </th>
+        </tr>
+       </thead>
+       <tbody id="rejected-users">
+       </tbody>
+      </table>
+     </div>
+    </div>
+   </div>
+  </div>
+  <!-- Modal for device info -->
+  <div aria-hidden="true" aria-labelledby="deviceInfoModalLabel" class="modal fade" id="deviceInfoModal" tabindex="-1">
+   <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content border-0">
+     <div class="modal-header bg-primary text-white">
+      <h5 class="modal-title" id="deviceInfoModalLabel">
+       Device Info
+      </h5>
+      <button aria-label="Close" class="btn-close" data-bs-dismiss="modal" type="button">
+      </button>
+     </div>
+     <div class="modal-body">
+      <p>
+       <strong>
+        Device Name:
+       </strong>
+       <span id="modal-device-name">
+       </span>
+      </p>
+      <p>
+       <strong>
+        Device UUID:
+       </strong>
+       <span id="modal-device-uuid">
+       </span>
+      </p>
+      <p>
+       <strong>
+        Registered At:
+       </strong>
+       <span id="modal-registered-at">
+       </span>
+      </p>
+     </div>
+    </div>
+   </div>
+  </div>
+  <!-- Scripts -->
+  <script>
+   function initDataTable(id) {
+    if ($.fn.DataTable.isDataTable(id)) {
+      $(id).DataTable().clear().destroy();
+    }
+    return $(id).DataTable({
+      autoWidth: false,
+      dom: 'rt<"mt-2"lp>',
+      buttons: [
+        {
+            extend: 'excel',
+            className: 'buttons-excel',
+            exportOptions: {
+                columns: function(idx, data, node) {
+                    return $(node).text().trim() !== 'Action';
+                }
+            }
+        },
+        {
+            extend: 'pdf',
+            className: 'buttons-pdf',
+            exportOptions: {
+                columns: function(idx, data, node) {
+                    return $(node).text().trim() !== 'Action';
+                }
+            }
+        },
+        {
+            extend: 'print',
+            className: 'buttons-print',
+            exportOptions: {
+                columns: function(idx, data, node) {
+                    return $(node).text().trim() !== 'Action';
+                }
+            },
+            customize: function ( win ) {
+                $(win.document.body).css('font-family', 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif');
+                $(win.document.body).find('h1').css({'text-align': 'center', 'font-size': '18pt'});
+                $(win.document.body).find('table').css({'margin': '0 auto', 'font-size': '10pt'});
+            }
+        }
+        
+        
+      ]
+    });
+  }
+
+  
+  function showNotification(message, type) {
+    const textColor = {
+      success: "#fff",
+      danger: "#fff",
+      warning: "#fff",
+      info: "#fff"
+    };
+
+    $("#notification")
+      .css("color", textColor[type] || "#fff")
+      .text(message)
+      .fadeIn();
+
+    setTimeout(() => $("#notification").fadeOut(), 3000);
+  }
+
+    
+    
+
+  
+  function buildRow(user, actions) {
+    return `
+      <tr>
+        <td>${user.email}</td>
+        <td>${user.phone}</td>
+        <td>${user.device_name}</td>
+        <td>${user.device_uuid}</td>
+        <td>${actions}</td>
+      </tr>`;
+  }
+
+  
+  function buildActions(user, status) {
+    const infoBtn = `
+      <button class="icon-btn info-btn" 
+        data-name="${user.device_name}" 
+        data-uuid="${user.device_uuid}" 
+        data-registered="${user.registered_at}">
+        <i class="fas fa-info-circle"></i>
+      </button>`;
+
+    if (status === "pending") {
+      return `
+        <button class="icon-btn approve-btn" data-email="${user.email}">
+          <i class="fas fa-check"></i>
+        </button>
+        <button class="icon-btn reject-btn" data-email="${user.email}">
+          <i class="fas fa-times"></i>
+        </button>
+        ${infoBtn}`;
+    }
+
+    if (status === "approved") {
+      return `
+        ${infoBtn}
+        <button class="icon-btn delete-btn" data-email="${user.email}">
+          <i class="fas fa-trash"></i>
+        </button>`;
+    }
+
+    return `
+      <button class="icon-btn delete-btn" data-email="${user.email}">
+        <i class="fas fa-trash"></i>
+      </button>`;
+  }
+
+  function refreshTables(data) {
+    const tables = [
+      { id: '#user-table-1', users: data.pending_users, status: 'pending' },
+      { id: '#user-table-2', users: data.approved_users, status: 'approved' },
+      { id: '#user-table-3', users: data.rejected_users, status: 'rejected' }
+    ];
+
+    tables.forEach(({ id, users, status }) => {
+      const table = $(id);
+      if ($.fn.DataTable.isDataTable(id)) {
+        $(id).DataTable().clear().destroy();
+      }
+      const body = table.find("tbody");
+      body.empty();
+      users.forEach(user => {
+        body.append(buildRow(user, buildActions(user, status)));
+      });
+      initDataTable(id);
+
+      document.getElementById("pending-count").innerText = data.pending_users.length;
+      document.getElementById("approved-count").innerText = data.approved_users.length;
+      document.getElementById("rejected-count").innerText = data.rejected_users.length;
+    });
+  }
+
+  function fetchUsers() {
+    $("#refresh-btn").prop("disabled", true).html('<i class="fas fa-spinner fa-spin"></i>');
+    $.get("/newadmin_data")
+      .done(data => refreshTables(data))
+      .fail(() => showNotification("Error loading user data.", "danger"))
+      .always(() => $("#refresh-btn").prop("disabled", false).html('<i class="fas fa-sync-alt"></i>'));
+  }
+
+  $(document).on("click", ".approve-btn", function () {
+    const email = $(this).data("email");
+    $.post(`/newapprove/${encodeURIComponent(email)}`, () => {
+      showNotification("User approved successfully!", "success");
+      fetchUsers();
+    }).fail(() => showNotification("Approval failed.", "danger"));
+  });
+
+  $(document).on("click", ".reject-btn", function () {
+    const email = $(this).data("email");
+    $.post(`/newreject/${encodeURIComponent(email)}`, () => {
+      showNotification("User rejected successfully!", "warning");
+      fetchUsers();
+    }).fail(() => showNotification("Rejection failed.", "danger"));
+  });
+
+  $(document).on("click", ".delete-btn", function () {
+    const email = $(this).data("email");
+    $.get(`/newdelete_user/${encodeURIComponent(email)}`, () => {
+      showNotification("User deleted.", "danger");
+      fetchUsers();
+    }).fail(() => showNotification("Delete failed.", "danger"));
+  });
+
+  $(document).on("click", ".info-btn", function () {
+    $("#modal-device-name").text($(this).data("name") || "N/A");
+    $("#modal-device-uuid").text($(this).data("uuid") || "N/A");
+    $("#modal-registered-at").text($(this).data("registered") || "N/A");
+    const modal = new bootstrap.Modal(document.getElementById("deviceInfoModal"));
+    modal.show();
+  });
+
+  $("#refresh-btn").click(fetchUsers);
+  fetchUsers();
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js">
+  </script>
+  <script>
+   $(document).ready(function () {
+  function getActiveTable() {
+    const activeId = $('.tab-pane.active table').attr('id');
+    return $('#' + activeId).DataTable();
+  }
+
+  $('#btnExcel').click(function () {
+    const dt = getActiveTable();
+    if (dt) dt.button('.buttons-excel').trigger();
+  });
+
+  $('#btnPDF').click(function () {
+    const dt = getActiveTable();
+    if (dt) dt.button('.buttons-pdf').trigger();
+  });
+
+  $('#btnPrint').click(function () {
+    const dt = getActiveTable();
+    if (dt) dt.button('.buttons-print').trigger();
+  });
+
+  $('#toolbarSearch').on('keyup change', function () {
+    const dt = getActiveTable();
+    if (dt) dt.search(this.value).draw();
+  });
+
+  $('a[data-bs-toggle="tab"]').on('shown.bs.tab', function () {
+    $('#toolbarSearch').val('');
+    const dt = getActiveTable();
+    if (dt) dt.search('').draw();
+  });
+});
+  </script>
+ </body>
+</html>
