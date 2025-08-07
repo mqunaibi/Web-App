@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="utf-8"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Web-App - Welcome</title>
-    <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet"/>
-    <style>
-        body {
+ <head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>
+   WE APP - Welcome
+  </title>
+  <link href="{{ url_for('static', filename='css/bootstrap.min.css') }}" rel="stylesheet"/>
+  <style>
+   body {
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -45,14 +47,21 @@
                 font-size: 1.4rem;
             }
         }
-    </style>
-</head>
-<body>
-    <div class="landing-card">
-        <!-- يمكنك إضافة شعار هنا إن أردت -->
-        <h1>Web-App</h1>
-        <p>Welcome to Web-App!<br>Manage your users and data easily.</p>
-        <a href="/login" class="btn btn-primary btn-main">Login</a>
-    </div>
-</body>
+  </style>
+ </head>
+ <body>
+  <div class="landing-card">
+   <!-- يمكنك إضافة شعار هنا إن أردت -->
+   <h1>
+    WE APP
+   </h1>
+   <p>
+    Welcome to WE APP!
+Manage your users and data easily.
+   </p>
+   <a class="btn btn-primary btn-main" href="/login">
+    Login
+   </a>
+  </div>
+ </body>
 </html>

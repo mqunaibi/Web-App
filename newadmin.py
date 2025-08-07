@@ -1,4 +1,5 @@
-from flask import Blueprint, render_template, session, redirect, url_for, request, jsonify
+from api_handler import add_admin_user 
+from flask import Blueprint, render_template, session, redirect, url_for, request, jsonify, flash
 from api_handler import (
     get_pending_users, get_approved_users, get_rejected_users,
     approve_user, reject_user, delete_user
@@ -72,3 +73,23 @@ def format_users(users):
             "device_uuid": user.get("device_uuid", "N/A")
         } for user in users
     ]
+
+@newadmin_bp.route("/admin-add", methods=["GET", "POST"])
+def admin_add():
+    if 'admin_logged_in' not in session:
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+        role = request.form['role']
+        is_active = 1 if 'is_active' in request.form else 0
+
+        result = add_admin_user(username, password, role, is_active)
+        if result is True:
+            flash("Admin added successfully!", "success")
+            return redirect(url_for('admin_manage'))
+        else:
+            flash(result, "danger")
+
+    return render_template('admin_add.html')

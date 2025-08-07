@@ -2,6 +2,7 @@ import logging
 import pymysql
 import os
 import random
+import hashlib
 from datetime import datetime
 from dotenv import load_dotenv
 load_dotenv(dotenv_path="/home/otp/.env")
@@ -89,3 +90,42 @@ def reject_user(email):
 
 def delete_user(email):
     return execute_query("DELETE FROM users WHERE email = %s", (email,))
+
+
+def get_admin_by_id(admin_id):
+    result = execute_query(
+        "SELECT id, username, role, is_active FROM admin_users WHERE id = %s",
+        (admin_id,),
+        fetch=True
+    )
+    return result[0] if result else None
+
+def update_admin_user(admin_id, username, role, is_active):
+    return execute_query(
+        "UPDATE admin_users SET username = %s, role = %s, is_active = %s WHERE id = %s",
+        (username, role, is_active, admin_id)
+    )
+
+def delete_admin_user(admin_id):
+    return execute_query("DELETE FROM admin_users WHERE id = %s", (admin_id,))
+
+def toggle_admin_status(admin_id):
+    result = execute_query("SELECT is_active FROM admin_users WHERE id = %s", (admin_id,), fetch=True)
+    if not result:
+        return "Admin not found"
+    current_status = result[0]['is_active']
+    new_status = 0 if current_status else 1
+    return execute_query("UPDATE admin_users SET is_active = %s WHERE id = %s", (new_status, admin_id))
+
+def get_all_admins():
+    return execute_query(
+        "SELECT id, username, role, is_active, created_at FROM admin_users",
+        fetch=True
+    )
+
+def add_admin_user(username, password, role, is_active):
+    hashed = hashlib.sha256(password.encode()).hexdigest()
+    return execute_query(
+        "INSERT INTO admin_users (username, password, role, is_active, created_at) VALUES (%s, %s, %s, %s, NOW())",
+        (username, hashed, role, is_active)
+    )
