@@ -21,9 +21,9 @@ from api_handler import (
     delete_admin_user,
     toggle_admin_status,
     get_all_admins,
-    check_admin_login,               # DB-based login
-    verify_admin_password,           # NEW
-    update_admin_password,           # NEW
+    check_admin_login,               # DB-based login (now uses Werkzeug hashing)
+    verify_admin_password,           # verify current password (auto-migrates legacy)
+    update_admin_password,           # update password (Werkzeug hashing)
 )
 
 load_dotenv()
@@ -31,6 +31,9 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "change-me")
 app.register_blueprint(newadmin_bp)
+
+# Logging (مستوى INFO افتراضيًا؛ غيّره بمتغيّر البيئة LOG_LEVEL إن رغبت)
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 
 
 # ---------------- Auth ----------------
@@ -204,24 +207,48 @@ def handle_not_found(e):
 def handle_internal_error(e):
     return render_template("500.html"), 500
 
+
+# ---------------- Reset password (by super for any admin) ----------------
 @app.route("/admin-reset-password/<int:admin_id>", methods=["POST"])
 def admin_reset_password(admin_id):
-    guard = require_roles("super")
-    if guard:
-        return guard  # يعيد توجيه/403 إذا ليس Super
+    """
+    Always returns JSON. Handles auth/role checks locally (بدل require_roles)
+    لكي لا يرجع تحويل HTML على /login أو صفحة 403 HTML.
+    """
+    # Auth check
+    if not session.get("admin_logged_in"):
+        app.logger.warning("401 reset-password: anonymous tried to reset id=%s", admin_id)
+        return jsonify({"ok": False, "error": "Not authenticated."}), 401
 
-    new_password = (request.form.get("new_password") or "").strip()
-    confirm = (request.form.get("confirm_password") or "").strip()
+    # Role check
+    role = (session.get("admin_role") or "").strip().lower()
+    user = session.get("admin_user")
+    if role != "super":
+        app.logger.warning("403 reset-password: %s (role=%s) tried to reset id=%s", user, role, admin_id)
+        return jsonify({"ok": False, "error": "Forbidden (super only)."}), 403
 
-    if not new_password or len(new_password) < 8:
-        return jsonify({"ok": False, "error": "Password must be at least 8 characters."}), 400
-    if new_password != confirm:
-        return jsonify({"ok": False, "error": "Passwords do not match."}), 400
+    try:
+        new_password = (request.form.get("new_password") or "").strip()
+        confirm = (request.form.get("confirm_password") or "").strip()
 
-    res = update_admin_password(admin_id, new_password)
-    if res is True:
-        return jsonify({"ok": True, "message": "Password updated successfully."})
-    return jsonify({"ok": False, "error": str(res)}), 500
+        if not new_password or len(new_password) < 8:
+            return jsonify({"ok": False, "error": "Password must be at least 8 characters."}), 400
+        if new_password != confirm:
+            return jsonify({"ok": False, "error": "Passwords do not match."}), 400
+
+        res = update_admin_password(admin_id, new_password)
+        if res is True:
+            app.logger.info("Reset password: id=%s by super=%s", admin_id, user)
+            return jsonify({"ok": True, "message": "Password updated successfully."})
+
+        # DB error
+        app.logger.error("DB error on reset password (id=%s): %s", admin_id, res)
+        return jsonify({"ok": False, "error": str(res)}), 500
+
+    except Exception:
+        app.logger.exception("Reset password crashed (id=%s)", admin_id)
+        return jsonify({"ok": False, "error": "Server error"}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True)

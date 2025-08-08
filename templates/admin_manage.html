@@ -106,47 +106,47 @@ window.addEventListener('DOMContentLoaded', function () {
   const userHint  = document.getElementById('resetPwUserHint');
   const submitBtn = document.getElementById('resetPwSubmit');
 
-  // افتح المودال عند الضغط على زر Reset داخل عمود Actions
   document.addEventListener('click', function (e) {
     const btn = e.target.closest('.reset-btn');
     if (!btn) return;
 
-    targetUrl = btn.dataset.url;             // URL جاهز من url_for
+    targetUrl = btn.dataset.url;
     const uname = btn.dataset.adminUsername || '';
     userHint.textContent = 'Reset password for: ' + uname;
 
     form.reset();
     alertBox.className = 'alert d-none';
 
-    // ✅ تأكد من تحميل Bootstrap ثم أنشئ الـModal عند الحاجة فقط
     if (!window.bootstrap) {
-      console.error('Bootstrap bundle is not loaded.');
-      alert('Bootstrap JS not loaded. Make sure layout.html includes bootstrap.bundle.min.js.');
+      console.error('Bootstrap JS not loaded');
+      alert('Bootstrap JS not loaded. Check layout.html');
       return;
     }
     if (!modal) modal = new window.bootstrap.Modal(modalEl);
     modal.show();
   });
 
-  // إرسال الطلب
   form.addEventListener('submit', async function (e) {
     e.preventDefault();
     if (!targetUrl) return;
 
     alertBox.className = 'alert d-none';
-    submitBtn.disabled = true; 
-    submitBtn.textContent = 'Updating...';
+    submitBtn.disabled = true; submitBtn.textContent = 'Updating...';
 
     try {
       const res = await fetch(targetUrl, {
         method: 'POST',
         body: new FormData(form),
-        credentials: 'same-origin',                 // ضروري لإرسال الكوكيز
+        credentials: 'same-origin',
         headers: { 'Accept': 'application/json' }
       });
 
       const ct = res.headers.get('content-type') || '';
-      if (!ct.includes('application/json')) throw new Error('Unexpected response (are you SUPER?)');
+      // لو الاستجابة ليست JSON (تحويل/403/صفحة HTML) نعرض النص كما هو
+      if (!ct.includes('application/json')) {
+        const text = await res.text();
+        throw new Error('Unexpected response (' + res.status + '). ' + text.slice(0, 200));
+      }
 
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Request failed');
@@ -158,11 +158,11 @@ window.addEventListener('DOMContentLoaded', function () {
       alertBox.className = 'alert alert-danger';
       alertBox.textContent = err.message || 'Error updating password.';
     } finally {
-      submitBtn.disabled = false;
-      submitBtn.textContent = 'Update Password';
+      submitBtn.disabled = false; submitBtn.textContent = 'Update Password';
     }
   });
 });
 </script>
+
 
 {% endblock %}
