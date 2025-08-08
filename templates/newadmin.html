@@ -22,7 +22,7 @@
   /* تمييز صفوف الجدول عند المرور */
   .table-hover tbody tr:hover { background:#f8faff; }
 
-  /* محاذاة و عرض مناسب لعمود Action */
+  /* محاذاة و عرض مناسب لعمود Action (إن وُجد) */
   table.dataTable th:last-child,
   table.dataTable td:last-child {
     text-align:center; white-space:nowrap; width:110px;
@@ -101,7 +101,9 @@
               <th>Phone</th>
               <th>Device Name</th>
               <th class="d-none d-md-table-cell">Device UUID</th>
-              <th>Action</th>
+              {% if admin_role in ['super','limited'] %}
+                <th>Action</th>
+              {% endif %}
             </tr>
           </thead>
           <tbody id="pending-users"></tbody>
@@ -119,7 +121,9 @@
               <th>Phone</th>
               <th>Device Name</th>
               <th class="d-none d-md-table-cell">Device UUID</th>
-              <th>Action</th>
+              {% if admin_role in ['super','limited'] %}
+                <th>Action</th>
+              {% endif %}
             </tr>
           </thead>
           <tbody id="approved-users"></tbody>
@@ -137,7 +141,9 @@
               <th>Phone</th>
               <th>Device Name</th>
               <th class="d-none d-md-table-cell">Device UUID</th>
-              <th>Action</th>
+              {% if admin_role in ['super','limited'] %}
+                <th>Action</th>
+              {% endif %}
             </tr>
           </thead>
           <tbody id="rejected-users"></tbody>
@@ -180,6 +186,9 @@
 <script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
 
 <script>
+  // === صلاحيات الواجهة ===
+  const CAN_EDIT = ["super","limited"].includes(("{{ admin_role }}").trim().toLowerCase());
+
   // تهيئة DataTable لكل جدول
   function initDataTable(id) {
     if ($.fn.DataTable.isDataTable(id)) {
@@ -225,17 +234,19 @@
     });
   }
 
-  function showNotification(message, type) {
+  function showNotification(message) {
     $('#notification').text(message).fadeIn();
     setTimeout(() => $('#notification').fadeOut(), 3000);
   }
 
-  // نسخة محسّنة لعرض القيم و UUID
-  function buildRow(user, actions) {
+  function buildRow(user, actionsHtml) {
     const phoneCell      = user.phone       ? user.phone       : '<span class="text-muted">—</span>';
     const deviceNameCell = user.device_name ? user.device_name : '<span class="text-muted">—</span>';
     const uuidCell       = user.device_uuid ? `<span class="text-clip" title="${user.device_uuid}">${user.device_uuid}</span>`
                                             : '<span class="text-muted">—</span>';
+
+    // عمود Action يُضاف فقط إذا CAN_EDIT=true (super + limited)
+    const actionCell = CAN_EDIT ? `<td class="text-center">${actionsHtml}</td>` : '';
 
     return `
       <tr>
@@ -243,17 +254,16 @@
         <td>${phoneCell}</td>
         <td>${deviceNameCell}</td>
         <td>${uuidCell}</td>
-        <td class="text-center">${actions}</td>
+        ${actionCell}
       </tr>`;
   }
 
-  // تحسين أزرار Action وتوحيد مقاس الأيقونات
   function buildActions(user, status) {
     const infoBtn = `
       <button class="btn btn-link action-btn info-btn" 
-        data-name="${user.device_name}" 
-        data-uuid="${user.device_uuid}" 
-        data-registered="${user.registered_at}" 
+        data-name="${user.device_name || ''}" 
+        data-uuid="${user.device_uuid || ''}" 
+        data-registered="${user.registered_at || ''}" 
         title="Info">
         <i class="fas fa-info-circle"></i>
       </button>`;
@@ -285,9 +295,9 @@
 
   function refreshTables(data) {
     const tables = [
-      { id: '#user-table-1', users: data.pending_users,  status: 'pending'  },
-      { id: '#user-table-2', users: data.approved_users, status: 'approved' },
-      { id: '#user-table-3', users: data.rejected_users, status: 'rejected' }
+      { id: '#user-table-1', users: data.pending_users  || [], status: 'pending'  },
+      { id: '#user-table-2', users: data.approved_users || [], status: 'approved' },
+      { id: '#user-table-3', users: data.rejected_users || [], status: 'rejected' }
     ];
 
     tables.forEach(({ id, users, status }) => {
@@ -296,43 +306,51 @@
       }
       const $body = $(id).find('tbody');
       $body.empty();
-      users.forEach(user => $body.append(buildRow(user, buildActions(user, status))));
+
+      users.forEach(user => {
+        const actions = CAN_EDIT ? buildActions(user, status) : ''; // أزرار فقط لـ super + limited
+        $body.append(buildRow(user, actions));
+      });
+
       initDataTable(id);
     });
 
-    document.getElementById("pending-count").innerText  = data.pending_users.length;
-    document.getElementById("approved-count").innerText = data.approved_users.length;
-    document.getElementById("rejected-count").innerText = data.rejected_users.length;
+    document.getElementById("pending-count").innerText  = (data.pending_users  || []).length;
+    document.getElementById("approved-count").innerText = (data.approved_users || []).length;
+    document.getElementById("rejected-count").innerText = (data.rejected_users || []).length;
   }
 
   function fetchUsers() {
     $("#refresh-btn").prop("disabled", true).html('<i class="fas fa-spinner fa-spin"></i>');
     $.get("/newadmin_data")
       .done(data => refreshTables(data))
-      .fail(() => showNotification("Error loading user data.", "danger"))
+      .fail(() => showNotification("Error loading user data."))
       .always(() => $("#refresh-btn").prop("disabled", false).html('<i class="fas fa-sync-alt"></i>'));
   }
 
-  // أحداث الأزرار
+  // أحداث الأزرار (لن تُفعّل للمشاهد لأن الأزرار لن تظهر)
   $(document).on("click", ".approve-btn", function () {
     const email = $(this).data("email");
     $.post(`/newapprove/${encodeURIComponent(email)}`)
-      .done(() => { showNotification("User approved successfully!", "success"); fetchUsers(); })
-      .fail(() => { showNotification("Approval failed.", "danger"); });
+      .done(() => { showNotification("User approved successfully!"); fetchUsers(); })
+      .fail(() => { showNotification("Approval failed."); });
   });
 
   $(document).on("click", ".reject-btn", function () {
     const email = $(this).data("email");
     $.post(`/newreject/${encodeURIComponent(email)}`)
-      .done(() => { showNotification("User rejected successfully!", "warning"); fetchUsers(); })
-      .fail(() => { showNotification("Rejection failed.", "danger"); });
+      .done(() => { showNotification("User rejected successfully!"); fetchUsers(); })
+      .fail(() => { showNotification("Rejection failed."); });
   });
 
   $(document).on("click", ".delete-btn", function () {
     const email = $(this).data("email");
-    $.get(`/newdelete_user/${encodeURIComponent(email)}`)
-      .done(() => { showNotification("User deleted.", "danger"); fetchUsers(); })
-      .fail(() => { showNotification("Delete failed.", "danger"); });
+    $.ajax({
+      url: `/newdelete_user/${encodeURIComponent(email)}`,
+      type: 'POST'
+    })
+      .done(() => { showNotification("User deleted."); fetchUsers(); })
+      .fail(() => { showNotification("Delete failed."); });
   });
 
   $(document).on("click", ".info-btn", function () {
@@ -343,23 +361,30 @@
     modal.show();
   });
 
-  // أزرار التصدير والبحث للتاب النشط
+  // أزرار التصدير والبحث للتاب النشط + زر التحديث
   $(function () {
     function getActiveTable() {
       const activeId = $('.tab-pane.active table').attr('id');
       return activeId ? $('#' + activeId).DataTable() : null;
     }
 
-    $('#btnExcel').on('click', () => { const dt = getActiveTable(); if (dt) dt.button('.buttons-excel').trigger(); });
-    $('#btnPDF').on('click',   () => { const dt = getActiveTable(); if (dt) dt.button('.buttons-pdf').trigger(); });
-    $('#btnPrint').on('click', () => { const dt = getActiveTable(); if (dt) dt.button('.buttons-print').trigger(); });
+    $('#btnExcel').on('click', () => { const dt = getActiveTable(); if (dt && dt.button) dt.button('.buttons-excel').trigger(); });
+    $('#btnPDF').on('click',   () => { const dt = getActiveTable(); if (dt && dt.button) dt.button('.buttons-pdf').trigger(); });
+    $('#btnPrint').on('click', () => { const dt = getActiveTable(); if (dt && dt.button) dt.button('.buttons-print').trigger(); });
 
     $('#toolbarSearch').on('keyup change', function () {
       const dt = getActiveTable();
       if (dt) dt.search(this.value).draw();
     });
 
-    $('a[data-bs-toggle="tab"]').on('shown.bs.tab', function () {
+    // ⬅️ ربط زر التحديث
+    $('#refresh-btn').off('click').on('click', function (e) {
+      e.preventDefault();
+      fetchUsers();
+    });
+
+    // دعم <button> أو <a> للتبويبات
+    $(document).on('shown.bs.tab', '[data-bs-toggle="tab"]', function () {
       $('#toolbarSearch').val('');
       const dt = getActiveTable();
       if (dt) dt.search('').draw();

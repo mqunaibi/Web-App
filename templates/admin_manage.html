@@ -1,51 +1,168 @@
-
 {% extends 'layout.html' %}
 {% block content %}
+<div class="container py-4">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h1 class="mb-0">Admin Users</h1>
+    <a class="btn btn-primary" href="{{ url_for('newadmin.admin_add') }}">Add Admin</a>
+  </div>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-  <h2>Admin Users</h2>
-  <a href="/admin-add" class="btn btn-primary">Add Admin</a>
-</div>
-
-<div class="table-responsive">
-  <table class="table table-bordered table-striped table-hover align-middle">
-    <thead class="table-dark">
-      <tr>
-        <th>#</th>
-        <th>Username</th>
-        <th>Role</th>
-        <th>Active</th>
-        <th>Created At</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for admin in admins %}
-      <tr>
-        <td>{{ admin.id }}</td>
-        <td>{{ admin.username }}</td>
-        <td>{{ admin.role }}</td>
-        <td>
-          {% if admin.is_active %}
-            <span class="badge bg-success">Active</span>
-          {% else %}
-            <span class="badge bg-danger">Inactive</span>
-          {% endif %}
-        </td>
-        <td>{{ admin.created_at }}</td>
-        <td>
-          <a href="/admin-edit/{{ admin.id }}" class="btn btn-sm btn-warning">Edit</a>
-          <a href="/admin-delete/{{ admin.id }}" class="btn btn-sm btn-danger">Delete</a>
-          {% if admin.is_active %}
-            <a href="/admin-toggle/{{ admin.id }}" class="btn btn-sm btn-secondary">Deactivate</a>
-          {% else %}
-            <a href="/admin-toggle/{{ admin.id }}" class="btn btn-sm btn-success">Activate</a>
-          {% endif %}
-        </td>
-      </tr>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ 'success' if category=='success' else 'danger' }}">{{ message }}</div>
       {% endfor %}
-    </tbody>
-  </table>
+    {% endif %}
+  {% endwith %}
+
+  <div class="table-responsive">
+    <table class="table table-hover align-middle">
+      <thead class="table-dark">
+        <tr>
+          <th>#</th>
+          <th>Username</th>
+          <th>Role</th>
+          <th>Active</th>
+          <th>Created At</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in admins %}
+        <tr>
+          <td>{{ a.id }}</td>
+          <td>{{ a.username }}</td>
+          <td class="text-uppercase">{{ a.role }}</td>
+          <td>
+            {% if a.is_active %}<span class="badge bg-success">Active</span>
+            {% else %}<span class="badge bg-secondary">Inactive</span>{% endif %}
+          </td>
+          <td>{{ a.created_at }}</td>
+          <td class="text-nowrap">
+            <a href="{{ url_for('admin_edit', admin_id=a.id) }}" class="btn btn-warning btn-sm">Edit</a>
+
+            <!-- Reset Password بجانب Edit -->
+            <button type="button"
+                    class="btn btn-info btn-sm text-white reset-btn"
+                    title="Reset Password"
+                    data-url="{{ url_for('admin_reset_password', admin_id=a.id) }}"
+                    data-admin-username="{{ a.username }}">
+              <i class="bi bi-key"></i>
+            </button>
+
+            <a href="{{ url_for('admin_delete', admin_id=a.id) }}"
+               class="btn btn-danger btn-sm"
+               onclick="return confirm('Delete admin {{ a.username }}?');">Delete</a>
+
+            <a href="{{ url_for('admin_toggle', admin_id=a.id) }}" class="btn btn-secondary btn-sm">
+              {{ 'Deactivate' if a.is_active else 'Activate' }}
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
+
+<!-- Modal: Reset Password -->
+<div class="modal fade" id="resetPwModal" tabindex="-1" aria-labelledby="resetPwLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <form class="modal-content" id="resetPwForm" autocomplete="off">
+      <div class="modal-header">
+        <h5 class="modal-title" id="resetPwLabel">Reset Password</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-2 text-muted" id="resetPwUserHint"></div>
+        <div class="mb-3">
+          <label class="form-label">New Password</label>
+          <input type="password" class="form-control" name="new_password" minlength="8" required autocomplete="new-password">
+        </div>
+        <div class="mb-1">
+          <label class="form-label">Confirm New Password</label>
+          <input type="password" class="form-control" name="confirm_password" minlength="8" required autocomplete="new-password">
+        </div>
+        <div class="form-text">Minimum 8 characters.</div>
+        <div class="alert d-none mt-3" id="resetPwAlert"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="resetPwSubmit">Update Password</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+window.addEventListener('DOMContentLoaded', function () {
+  'use strict';
+
+  let targetUrl = null;
+  let modal = null;
+
+  const modalEl   = document.getElementById('resetPwModal');
+  const form      = document.getElementById('resetPwForm');
+  const alertBox  = document.getElementById('resetPwAlert');
+  const userHint  = document.getElementById('resetPwUserHint');
+  const submitBtn = document.getElementById('resetPwSubmit');
+
+  // افتح المودال عند الضغط على زر Reset داخل عمود Actions
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.reset-btn');
+    if (!btn) return;
+
+    targetUrl = btn.dataset.url;             // URL جاهز من url_for
+    const uname = btn.dataset.adminUsername || '';
+    userHint.textContent = 'Reset password for: ' + uname;
+
+    form.reset();
+    alertBox.className = 'alert d-none';
+
+    // ✅ تأكد من تحميل Bootstrap ثم أنشئ الـModal عند الحاجة فقط
+    if (!window.bootstrap) {
+      console.error('Bootstrap bundle is not loaded.');
+      alert('Bootstrap JS not loaded. Make sure layout.html includes bootstrap.bundle.min.js.');
+      return;
+    }
+    if (!modal) modal = new window.bootstrap.Modal(modalEl);
+    modal.show();
+  });
+
+  // إرسال الطلب
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    if (!targetUrl) return;
+
+    alertBox.className = 'alert d-none';
+    submitBtn.disabled = true; 
+    submitBtn.textContent = 'Updating...';
+
+    try {
+      const res = await fetch(targetUrl, {
+        method: 'POST',
+        body: new FormData(form),
+        credentials: 'same-origin',                 // ضروري لإرسال الكوكيز
+        headers: { 'Accept': 'application/json' }
+      });
+
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) throw new Error('Unexpected response (are you SUPER?)');
+
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.error || 'Request failed');
+
+      alertBox.className = 'alert alert-success';
+      alertBox.textContent = data.message || 'Password updated successfully.';
+      setTimeout(() => { if (modal) modal.hide(); }, 900);
+    } catch (err) {
+      alertBox.className = 'alert alert-danger';
+      alertBox.textContent = err.message || 'Error updating password.';
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Update Password';
+    }
+  });
+});
+</script>
 
 {% endblock %}
