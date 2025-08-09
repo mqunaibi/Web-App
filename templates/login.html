@@ -42,26 +42,24 @@
       width: 100%;
    }
 
-   /* ====== Brand / Logo ====== */
+   /* ====== Brand / Logo + Title ====== */
    .brand {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 10px;
-      margin-bottom: 14px;
+      margin-bottom: 22px;
    }
    .brand img {
-      height: 56px;
+      height: 40px;
       width: auto;
       display: block;
    }
-
-   .login-box h2 {
-      text-align: center;
-      color: #333;
-      margin: 8px 0 22px;
-      font-size: 24px;
+   .brand h2 {
+      margin: 0;
       font-weight: bold;
+      font-size: 24px;
+      color: #333;
    }
 
    .login-box input[type="text"],
@@ -113,13 +111,11 @@
  </head>
  <body>
   <div class="login-box">
-    <!-- شعار التطبيق -->
+    <!-- شعار التطبيق + العنوان -->
     <div class="brand">
-      <img src="{{ url_for('static', filename='images/logo.png') }}?v=2"
-           alt="WE-APP Logo"/>
+      <img src="{{ url_for('static', filename='images/logo.png') }}?v=2" alt="WE-APP Logo"/>
+      <h2>WE APP Login</h2>
     </div>
-
-    <h2>WE APP Login</h2>
 
     {% if error %}
       <p class="error">{{ error }}</p>
