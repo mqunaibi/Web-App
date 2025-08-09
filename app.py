@@ -14,6 +14,8 @@ import sys
 from dotenv import load_dotenv
 import os
 
+from werkzeug.middleware.proxy_fix import ProxyFix  # NEW
+
 from newadmin import newadmin_bp
 from api_handler import (
     execute_query,
@@ -50,6 +52,10 @@ logging.basicConfig(
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "change-me")
 
+# ---- Let Flask trust proxy headers (X-Forwarded-For) ----
+# So request.remote_addr becomes the client IP when behind Nginx/Gunicorn
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)  # NEW
+
 # ---- Session security (no behavior change) ----
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
@@ -58,6 +64,23 @@ app.config.update(
 )
 
 app.register_blueprint(newadmin_bp)
+
+# -------- Helper: reliable client IP ----------
+def get_client_ip() -> str:
+    """
+    Returns the real client IP, honoring X-Forwarded-For / X-Real-IP
+    when running behind a reverse proxy (Nginx).
+    """
+    # X-Forwarded-For may contain: client, proxy1, proxy2...
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff:
+        first = xff.split(",")[0].strip()
+        if first:
+            return first
+    xri = request.headers.get("X-Real-IP")
+    if xri:
+        return xri.strip()
+    return request.remote_addr or ""
 
 
 # ---------------- Auth ----------------
@@ -76,7 +99,7 @@ def login():
             session["admin_id"] = admin["id"]
             # DB log (best-effort)
             try:
-                log_admin_action(admin["username"], "login", "Admin logged in", request.remote_addr)
+                log_admin_action(admin["username"], "login", "Admin logged in", get_client_ip())  # CHG
             except Exception as e:
                 app.logger.warning("DB log (login) failed for %s: %s", admin["username"], e)
             return redirect(url_for("newadmin.admin_dashboard"))
@@ -90,7 +113,7 @@ def logout():
     who = session.get("admin_user")
     try:
         if who:
-            log_admin_action(who, "logout", "Admin logged out", request.remote_addr)
+            log_admin_action(who, "logout", "Admin logged out", get_client_ip())  # CHG
     except Exception as e:
         app.logger.warning("DB log (logout) failed for %s: %s", who, e)
     session.clear()
@@ -172,7 +195,7 @@ def admin_edit(admin_id):
                 session.get("admin_user"),
                 "edit_admin",
                 f"Edited admin id={admin_id} (username={username}, role={role}, active={is_active})",
-                request.remote_addr,
+                get_client_ip(),  # CHG
             )
         except Exception as e:
             app.logger.warning("DB log (edit_admin) failed: %s", e)
@@ -200,7 +223,7 @@ def admin_edit(admin_id):
                         session.get("admin_user"),
                         "update_admin_password",
                         f"Updated password for admin id={admin_id}",
-                        request.remote_addr,
+                        get_client_ip(),  # CHG
                     )
                 except Exception as e:
                     app.logger.warning("DB log (update_admin_password) failed: %s", e)
@@ -240,7 +263,7 @@ def admin_delete(admin_id):
                 session.get("admin_user"),
                 "delete_admin",
                 f"Deleted admin id={admin_id}",
-                request.remote_addr,
+                get_client_ip(),  # CHG
             )
         except Exception as e:
             app.logger.warning("DB log (delete_admin) failed: %s", e)
@@ -281,7 +304,7 @@ def admin_toggle(admin_id):
                 session.get("admin_user"),
                 "toggle_admin_status",
                 f"Toggled status for admin id={admin_id}",
-                request.remote_addr,
+                get_client_ip(),  # CHG
             )
         except Exception as e:
             app.logger.warning("DB log (toggle_admin_status) failed: %s", e)
@@ -375,7 +398,7 @@ def admin_reset_password(admin_id):
                     user,
                     "reset_admin_password",
                     f"Reset password for admin id={admin_id}",
-                    request.remote_addr,
+                    get_client_ip(),  # CHG
                 )
             except Exception as e:
                 app.logger.warning("DB log (reset_admin_password) failed: %s", e)
@@ -478,7 +501,9 @@ def admin_logs_data():
 
 # ---------------- Admin logs (page) ----------------
 @app.route("/admin-logs", methods=["GET"])
-def admin_logs_page():
+def admin_logs():
+    """Renders the admin activity logs page (front-end).
+    Data is fetched from /admin-logs-data via fetch in admin_logs.html"""
     guard = require_roles("super")
     if guard:
         return guard
@@ -492,29 +517,12 @@ def admin_logs_page():
         "page": int(request.args.get("page", 1) or 1),
         "per_page": int(request.args.get("per_page", 20) or 20),
     }
-    return render_template("admin_logs.html", initial_filters=initial_filters)
-
-# ---- Admin Activity Logs (page) ----
-from flask import render_template, request  # تأكد من الاستيراد
-
-@app.route("/admin-logs", methods=["GET"])
-def admin_logs():
-    """
-    صفحة سجل نشاط المشرفين (واجهة فقط).
-    تعتمد على /admin-logs-data لجلب البيانات عبر fetch من داخل admin_logs.html
-    """
-    initial_filters = {
-        "date_from": request.args.get("date_from", ""),
-        "date_to":   request.args.get("date_to", ""),
-        "action":    request.args.get("action", ""),
-        "admin":     request.args.get("admin", ""),
-        "q":         request.args.get("q", ""),
-        "page":      int(request.args.get("page", 1) or 1),
-        "per_page":  int(request.args.get("per_page", 20) or 20),
-    }
     return render_template("admin_logs.html",
                            initial_filters=initial_filters,
                            active_page="logs")
+
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 
 
 if __name__ == "__main__":
