@@ -1,9 +1,9 @@
 {% extends 'layout.html' %}
+{% set page_title = "Edit Admin" %}
 {% block content %}
 
 <div class="container py-4">
-  <h2 class="mb-4">Edit Admin</h2>
-
+  
   <form method="POST" action="/admin-edit/{{ admin.id }}" autocomplete="off">
     <div class="mb-3">
       <label for="edit-username" class="form-label">Username</label>
