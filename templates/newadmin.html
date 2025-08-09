@@ -1,38 +1,22 @@
 {% extends 'layout.html' %}
 {% block content %}
 
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.1/css/buttons.bootstrap5.min.css">
+<!-- DataTables 1.13.8 + Buttons 2.4.2 -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/table_columns.css') }}">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
 
 <style>
-  /* رأس الجدول بالأسود لتحسين الوضوح */
   table.dataTable thead th { color:#000; }
-
-  /* شريط الأدوات: ظل خفيف وتباعد مدمج */
   #toolbar { box-shadow: 0 1px 2px rgba(0,0,0,.05); }
   #toolbar .btn { line-height: 1; }
-
-  /* البحث أصغر على الشاشات الصغيرة */
-  @media (max-width: 576px) {
-    #toolbarSearch { width: 140px !important; }
-  }
-
-  /* تمييز صفوف الجدول عند المرور */
+  @media (max-width: 576px) { #toolbarSearch { width: 140px !important; } }
   .table-hover tbody tr:hover { background:#f8faff; }
-
-  /* محاذاة و عرض مناسب لعمود Action (إن وُجد) */
   table.dataTable th:last-child,
-  table.dataTable td:last-child {
-    text-align:center; white-space:nowrap; width:110px;
-  }
-
-  /* أيقونات الإجراءات بحجم موحّد ومسافة خفيفة */
+  table.dataTable td:last-child { text-align:center; white-space:nowrap; width:110px; }
   .action-btn { padding: 0 .25rem; }
   .action-btn i { font-size: 1rem; }
-
-  /* تقليم النص الطويل (UUID) مع إظهار كامل النص في tooltip */
   .text-clip {
     display:inline-block; max-width: 260px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -172,24 +156,25 @@
 
 <!-- سكربتات DataTables + Buttons -->
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Bootstrap 5.3.3 -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<!-- DataTables core + BS5 integration -->
+<script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
 
-<script src="https://cdn.datatables.net/buttons/2.4.1/js/dataTables.buttons.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.bootstrap5.min.js"></script>
+<!-- Buttons 2.4.2 -->
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.html5.min.js"></script>
-<script src="https://cdn.datatables.net/buttons/2.4.1/js/buttons.print.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
 
 <script>
-  // === صلاحيات الواجهة ===
   const CAN_EDIT = ["super","limited"].includes(("{{ admin_role }}").trim().toLowerCase());
 
-  // تهيئة DataTable لكل جدول
   function initDataTable(id) {
     if ($.fn.DataTable.isDataTable(id)) {
       $(id).DataTable().clear().destroy();
@@ -201,29 +186,17 @@
         {
           extend: 'excel',
           className: 'buttons-excel',
-          exportOptions: {
-            columns: function(idx, data, node) {
-              return $(node).text().trim() !== 'Action';
-            }
-          }
+          exportOptions: { columns: function(idx, data, node) { return $(node).text().trim() !== 'Action'; } }
         },
         {
           extend: 'pdf',
           className: 'buttons-pdf',
-          exportOptions: {
-            columns: function(idx, data, node) {
-              return $(node).text().trim() !== 'Action';
-            }
-          }
+          exportOptions: { columns: function(idx, data, node) { return $(node).text().trim() !== 'Action'; } }
         },
         {
           extend: 'print',
           className: 'buttons-print',
-          exportOptions: {
-            columns: function(idx, data, node) {
-              return $(node).text().trim() !== 'Action';
-            }
-          },
+          exportOptions: { columns: function(idx, data, node) { return $(node).text().trim() !== 'Action'; } },
           customize: function ( win ) {
             $(win.document.body).css('font-family', 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif');
             $(win.document.body).find('h1').css({'text-align': 'center', 'font-size': '18pt'});
@@ -242,55 +215,23 @@
   function buildRow(user, actionsHtml) {
     const phoneCell      = user.phone       ? user.phone       : '<span class="text-muted">—</span>';
     const deviceNameCell = user.device_name ? user.device_name : '<span class="text-muted">—</span>';
-    const uuidCell       = user.device_uuid ? `<span class="text-clip" title="${user.device_uuid}">${user.device_uuid}</span>`
-                                            : '<span class="text-muted">—</span>';
-
-    // عمود Action يُضاف فقط إذا CAN_EDIT=true (super + limited)
+    const uuidCell       = user.device_uuid ? `<span class="text-clip" title="${user.device_uuid}">${user.device_uuid}</span>` : '<span class="text-muted">—</span>';
     const actionCell = CAN_EDIT ? `<td class="text-center">${actionsHtml}</td>` : '';
-
-    return `
-      <tr>
-        <td>${user.email}</td>
-        <td>${phoneCell}</td>
-        <td>${deviceNameCell}</td>
-        <td>${uuidCell}</td>
-        ${actionCell}
-      </tr>`;
+    return `<tr><td>${user.email}</td><td>${phoneCell}</td><td>${deviceNameCell}</td><td>${uuidCell}</td>${actionCell}</tr>`;
   }
 
   function buildActions(user, status) {
-    const infoBtn = `
-      <button class="btn btn-link action-btn info-btn" 
-        data-name="${user.device_name || ''}" 
-        data-uuid="${user.device_uuid || ''}" 
-        data-registered="${user.registered_at || ''}" 
-        title="Info">
-        <i class="fas fa-info-circle"></i>
-      </button>`;
-
+    const infoBtn = `<button class="btn btn-link action-btn info-btn" data-name="${user.device_name || ''}" data-uuid="${user.device_uuid || ''}" data-registered="${user.registered_at || ''}" title="Info"><i class="fas fa-info-circle"></i></button>`;
     if (status === "pending") {
-      return `
-        <button class="btn btn-link action-btn approve-btn" data-email="${user.email}" title="Approve">
-          <i class="fas fa-check text-success"></i>
-        </button>
-        <button class="btn btn-link action-btn reject-btn" data-email="${user.email}" title="Reject">
-          <i class="fas fa-times text-danger"></i>
-        </button>
-        ${infoBtn}`;
+      return `<button class="btn btn-link action-btn approve-btn" data-email="${user.email}" title="Approve"><i class="fas fa-check text-success"></i></button>
+              <button class="btn btn-link action-btn reject-btn" data-email="${user.email}" title="Reject"><i class="fas fa-times text-danger"></i></button>
+              ${infoBtn}`;
     }
-
     if (status === "approved") {
-      return `
-        ${infoBtn}
-        <button class="btn btn-link action-btn delete-btn" data-email="${user.email}" title="Delete">
-          <i class="fas fa-trash text-danger"></i>
-        </button>`;
+      return `${infoBtn}
+              <button class="btn btn-link action-btn delete-btn" data-email="${user.email}" title="Delete"><i class="fas fa-trash text-danger"></i></button>`;
     }
-
-    return `
-      <button class="btn btn-link action-btn delete-btn" data-email="${user.email}" title="Delete">
-        <i class="fas fa-trash text-danger"></i>
-      </button>`;
+    return `<button class="btn btn-link action-btn delete-btn" data-email="${user.email}" title="Delete"><i class="fas fa-trash text-danger"></i></button>`;
   }
 
   function refreshTables(data) {
@@ -299,25 +240,20 @@
       { id: '#user-table-2', users: data.approved_users || [], status: 'approved' },
       { id: '#user-table-3', users: data.rejected_users || [], status: 'rejected' }
     ];
-
     tables.forEach(({ id, users, status }) => {
       if ($.fn.DataTable.isDataTable(id)) {
         $(id).DataTable().clear().destroy();
       }
-      const $body = $(id).find('tbody');
-      $body.empty();
-
+      const $body = $(id).find('tbody').empty();
       users.forEach(user => {
-        const actions = CAN_EDIT ? buildActions(user, status) : ''; // أزرار فقط لـ super + limited
+        const actions = CAN_EDIT ? buildActions(user, status) : '';
         $body.append(buildRow(user, actions));
       });
-
       initDataTable(id);
     });
-
-    document.getElementById("pending-count").innerText  = (data.pending_users  || []).length;
-    document.getElementById("approved-count").innerText = (data.approved_users || []).length;
-    document.getElementById("rejected-count").innerText = (data.rejected_users || []).length;
+    $("#pending-count").text((data.pending_users  || []).length);
+    $("#approved-count").text((data.approved_users || []).length);
+    $("#rejected-count").text((data.rejected_users || []).length);
   }
 
   function fetchUsers() {
@@ -328,27 +264,20 @@
       .always(() => $("#refresh-btn").prop("disabled", false).html('<i class="fas fa-sync-alt"></i>'));
   }
 
-  // أحداث الأزرار (لن تُفعّل للمشاهد لأن الأزرار لن تظهر)
   $(document).on("click", ".approve-btn", function () {
-    const email = $(this).data("email");
-    $.post(`/newapprove/${encodeURIComponent(email)}`)
+    $.post(`/newapprove/${encodeURIComponent($(this).data("email"))}`)
       .done(() => { showNotification("User approved successfully!"); fetchUsers(); })
       .fail(() => { showNotification("Approval failed."); });
   });
 
   $(document).on("click", ".reject-btn", function () {
-    const email = $(this).data("email");
-    $.post(`/newreject/${encodeURIComponent(email)}`)
+    $.post(`/newreject/${encodeURIComponent($(this).data("email"))}`)
       .done(() => { showNotification("User rejected successfully!"); fetchUsers(); })
       .fail(() => { showNotification("Rejection failed."); });
   });
 
   $(document).on("click", ".delete-btn", function () {
-    const email = $(this).data("email");
-    $.ajax({
-      url: `/newdelete_user/${encodeURIComponent(email)}`,
-      type: 'POST'
-    })
+    $.post(`/newdelete_user/${encodeURIComponent($(this).data("email"))}`)
       .done(() => { showNotification("User deleted."); fetchUsers(); })
       .fail(() => { showNotification("Delete failed."); });
   });
@@ -357,40 +286,22 @@
     $("#modal-device-name").text($(this).data("name") || "N/A");
     $("#modal-device-uuid").text($(this).data("uuid") || "N/A");
     $("#modal-registered-at").text($(this).data("registered") || "N/A");
-    const modal = new bootstrap.Modal(document.getElementById("deviceInfoModal"));
-    modal.show();
+    new bootstrap.Modal(document.getElementById("deviceInfoModal")).show();
   });
 
-  // أزرار التصدير والبحث للتاب النشط + زر التحديث
   $(function () {
     function getActiveTable() {
       const activeId = $('.tab-pane.active table').attr('id');
       return activeId ? $('#' + activeId).DataTable() : null;
     }
-
-    $('#btnExcel').on('click', () => { const dt = getActiveTable(); if (dt && dt.button) dt.button('.buttons-excel').trigger(); });
-    $('#btnPDF').on('click',   () => { const dt = getActiveTable(); if (dt && dt.button) dt.button('.buttons-pdf').trigger(); });
-    $('#btnPrint').on('click', () => { const dt = getActiveTable(); if (dt && dt.button) dt.button('.buttons-print').trigger(); });
-
-    $('#toolbarSearch').on('keyup change', function () {
-      const dt = getActiveTable();
-      if (dt) dt.search(this.value).draw();
-    });
-
-    // ⬅️ ربط زر التحديث
-    $('#refresh-btn').off('click').on('click', function (e) {
-      e.preventDefault();
-      fetchUsers();
-    });
-
-    // دعم <button> أو <a> للتبويبات
+    $('#btnExcel').on('click', () => { const dt = getActiveTable(); if (dt) dt.button('.buttons-excel').trigger(); });
+    $('#btnPDF').on('click',   () => { const dt = getActiveTable(); if (dt) dt.button('.buttons-pdf').trigger(); });
+    $('#btnPrint').on('click', () => { const dt = getActiveTable(); if (dt) dt.button('.buttons-print').trigger(); });
+    $('#toolbarSearch').on('keyup change', function () { const dt = getActiveTable(); if (dt) dt.search(this.value).draw(); });
+    $('#refresh-btn').on('click', e => { e.preventDefault(); fetchUsers(); });
     $(document).on('shown.bs.tab', '[data-bs-toggle="tab"]', function () {
-      $('#toolbarSearch').val('');
-      const dt = getActiveTable();
-      if (dt) dt.search('').draw();
+      $('#toolbarSearch').val(''); const dt = getActiveTable(); if (dt) dt.search('').draw();
     });
-
-    // أول تحميل
     fetchUsers();
   });
 </script>

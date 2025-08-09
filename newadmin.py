@@ -2,60 +2,28 @@ from flask import (
     Blueprint, render_template, session, redirect, url_for,
     request, jsonify, flash, abort, g
 )
-from functools import wraps
+import logging
+from auth_utils import roles_required, normalize_role
 
 from api_handler import (
     get_pending_users, get_approved_users, get_rejected_users,
-    approve_user, reject_user, delete_user, add_admin_user
+    approve_user, reject_user, delete_user, add_admin_user,
+    # ✅ دالة تسجيل الحركات في DB
+    log_admin_action,
 )
 
 newadmin_bp = Blueprint("newadmin", __name__, url_prefix="")
 
-# ------------------------------
-# Helpers: role-based authorization (with normalization)
-# ------------------------------
-def _normalize_role(value, default="limited"):
-    """Trim + lowercase for consistent comparisons."""
-    return (value if value is not None else default).strip().lower()
-
-def roles_required(*allowed_roles):
-    """
-    Decorator to protect routes by role.
-    - Requires user to be logged in.
-    - Allows only roles listed in `allowed_roles` (normalized).
-    """
-    normalized_allowed = { _normalize_role(r, "") for r in allowed_roles }
-
-    def decorator(f):
-        @wraps(f)
-        def wrapper(*args, **kwargs):
-            if not session.get("admin_logged_in"):
-                return redirect(url_for("login"))
-            role = _normalize_role(session.get("admin_role"))
-            if role not in normalized_allowed:
-                abort(403)  # Forbidden
-            # Expose role to request/template contexts
-            g.admin_role = role
-            return f(*args, **kwargs)
-        return wrapper
-    return decorator
-
-
 @newadmin_bp.before_request
 def _enforce_login_and_context():
-    """
-    Enforce login for all blueprint routes.
-    Also prime g.admin_role (normalized) for templates.
-    """
     if not session.get("admin_logged_in"):
         return redirect(url_for("login"))
-    g.admin_role = _normalize_role(session.get("admin_role"))
+    g.admin_role = normalize_role(session.get("admin_role"))
 
 
 @newadmin_bp.app_context_processor
 def inject_role():
-    """Inject the current admin role into all templates as `admin_role` (normalized)."""
-    return {"admin_role": _normalize_role(session.get("admin_role"))}
+    return {"admin_role": normalize_role(session.get("admin_role"))}
 
 
 # ------------------------------
@@ -63,17 +31,15 @@ def inject_role():
 # ------------------------------
 @newadmin_bp.route("/admin-dashboard")
 def admin_dashboard():
-    # أي أدمن مسجّل دخول
     return render_template("dashboard.html")
 
 
 # ------------------------------
-# Users page — super + limited + viewer (viewer = عرض فقط)
+# Users page — super + limited + viewer
 # ------------------------------
 @newadmin_bp.route("/newadmin")
 @roles_required("super", "limited", "viewer")
 def newadmin_page():
-    # نعرض العدّادات، والجدول يُحمّل عبر AJAX
     pending_users = get_pending_users() or []
     approved_users = get_approved_users() or []
     rejected_users = get_rejected_users() or []
@@ -87,7 +53,7 @@ def newadmin_page():
 
 
 # ------------------------------
-# Users data (JSON) — super + limited + viewer
+# Users data (JSON)
 # ------------------------------
 @newadmin_bp.route("/newadmin_data")
 @roles_required("super", "limited", "viewer")
@@ -100,34 +66,67 @@ def admin_data():
 
 
 # ------------------------------
-# Sensitive actions — super + limited (viewer ممنوع)
+# Sensitive actions — with DB logging
 # ------------------------------
 @newadmin_bp.route("/newapprove/<email>", methods=["POST"])
 @roles_required("super", "limited")
 def newapprove(email):
+    admin_user = session.get("admin_user", "unknown")
+    logging.info("Approve request by admin=%s for user=%s", admin_user, email)
     result = approve_user(email)
     ok = (result is True)
+    if ok:
+        logging.info("User approved: %s by admin=%s", email, admin_user)
+        # ✅ Log DB
+        try:
+            log_admin_action(admin_user, "approve_user", f"Approved user {email}", request.remote_addr)
+        except Exception as e:
+            logging.warning("DB log (approve_user) failed: %s", e)
+    else:
+        logging.error("Approve failed for %s by admin=%s: %s", email, admin_user, result)
     return jsonify({"success": ok, "message": "OK" if ok else str(result)}), (200 if ok else 400)
 
 
 @newadmin_bp.route("/newreject/<email>", methods=["POST"])
 @roles_required("super", "limited")
 def newreject(email):
+    admin_user = session.get("admin_user", "unknown")
+    logging.info("Reject request by admin=%s for user=%s", admin_user, email)
     result = reject_user(email)
     ok = (result is True)
+    if ok:
+        logging.info("User rejected: %s by admin=%s", email, admin_user)
+        # ✅ Log DB
+        try:
+            log_admin_action(admin_user, "reject_user", f"Rejected user {email}", request.remote_addr)
+        except Exception as e:
+            logging.warning("DB log (reject_user) failed: %s", e)
+    else:
+        logging.error("Reject failed for %s by admin=%s: %s", email, admin_user, result)
     return jsonify({"success": ok, "message": "OK" if ok else str(result)}), (200 if ok else 400)
 
 
 @newadmin_bp.route("/newdelete_user/<email>", methods=["POST", "DELETE"])
 @roles_required("super", "limited")
 def newdelete_user(email):
+    admin_user = session.get("admin_user", "unknown")
+    logging.info("Delete request by admin=%s for user=%s", admin_user, email)
     result = delete_user(email)
     ok = (result is True)
+    if ok:
+        logging.info("User deleted: %s by admin=%s", email, admin_user)
+        # ✅ Log DB
+        try:
+            log_admin_action(admin_user, "delete_user", f"Deleted user {email}", request.remote_addr)
+        except Exception as e:
+            logging.warning("DB log (delete_user) failed: %s", e)
+    else:
+        logging.error("Delete failed for %s by admin=%s: %s", email, admin_user, result)
     return jsonify({"success": ok, "message": "OK" if ok else str(result)}), (200 if ok else 400)
 
 
 # ------------------------------
-# Admin add (manage admins) — super only
+# Admin add (manage admins)
 # ------------------------------
 @newadmin_bp.route("/admin-add", methods=["GET", "POST"])
 @roles_required("super")
@@ -140,9 +139,22 @@ def admin_add():
 
         result = add_admin_user(username, password, role, is_active)
         if result is True:
+            logging.info("Admin added: %s by super=%s", username, session.get("admin_user", "unknown"))
+            # ✅ Log DB
+            try:
+                log_admin_action(
+                    session.get("admin_user"),
+                    "add_admin",
+                    f"Added admin username={username}, role={role}, active={is_active}",
+                    request.remote_addr,
+                )
+            except Exception as e:
+                logging.warning("DB log (add_admin) failed: %s", e)
+
             flash("Admin added successfully!", "success")
             return redirect(url_for("admin_manage"))
         else:
+            logging.error("Failed to add admin=%s by super=%s: %s", username, session.get("admin_user", "unknown"), result)
             flash(str(result), "danger")
 
     return render_template("admin_add.html")

@@ -1,19 +1,23 @@
-
 {% extends 'layout.html' %}
 {% block content %}
 
-<div class="container">
+<div class="container py-4">
   <h2 class="mb-4">Edit Admin</h2>
 
-  <form method="POST" action="/admin-edit/{{ admin.id }}">
+  <form method="POST" action="/admin-edit/{{ admin.id }}" autocomplete="off">
     <div class="mb-3">
-      <label for="username" class="form-label">Username</label>
-      <input type="text" class="form-control" id="username" name="username" value="{{ admin.username }}" required>
+      <label for="edit-username" class="form-label">Username</label>
+      <input type="text" class="form-control" id="edit-username" name="username" value="{{ admin.username }}" required autocomplete="off">
     </div>
 
     <div class="mb-3">
-      <label for="role" class="form-label">Role</label>
-      <input type="text" class="form-control" id="role" name="role" value="{{ admin.role }}" required>
+      <label for="edit-role" class="form-label">Role</label>
+      <input type="text" class="form-control" id="edit-role" name="role" value="{{ admin.role }}" required autocomplete="off">
+    </div>
+
+    <div class="mb-3">
+      <label for="new-password" class="form-label">New Password (optional)</label>
+      <input type="password" class="form-control" id="new-password" name="new_password" placeholder="Enter new password" autocomplete="new-password">
     </div>
 
     <div class="form-check mb-3">

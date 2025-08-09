@@ -267,3 +267,18 @@ def update_admin_password(admin_id: int, new_password: str):
         "UPDATE admin_users SET password = %s WHERE id = %s",
         (hashed, admin_id),
     )
+
+def log_admin_action(username, action, details="", ip=""):
+    """
+    سجل عملية مشرف في جدول admin_activity_log
+    """
+    query = """
+        INSERT INTO admin_activity_log (admin_username, action, details, ip_address)
+        VALUES (%s, %s, %s, %s)
+    """
+    try:
+        execute_query(query, (username, action, details, ip))
+        return True
+    except Exception as e:
+        print(f"Error logging admin action: {e}")
+        return False

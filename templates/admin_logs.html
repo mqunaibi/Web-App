@@ -1,0 +1,245 @@
+{% extends "layout.html" %}
+{% block title %}Admin Activity Logs{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+  <h2 class="mb-3">Admin Activity Logs</h2>
+
+  <!-- Filters -->
+  <form id="filtersForm" class="row g-3 mb-3">
+    <div class="col-sm-6 col-md-3">
+      <label class="form-label">From date</label>
+      <input type="date" class="form-control" name="date_from" id="f_date_from"
+             value="{{ initial_filters.date_from or '' }}">
+    </div>
+    <div class="col-sm-6 col-md-3">
+      <label class="form-label">To date</label>
+      <input type="date" class="form-control" name="date_to" id="f_date_to"
+             value="{{ initial_filters.date_to or '' }}">
+    </div>
+    <div class="col-sm-6 col-md-3">
+      <label class="form-label">Action</label>
+      <input type="text" class="form-control" name="action" id="f_action" placeholder="e.g., approve_user"
+             value="{{ initial_filters.action or '' }}">
+    </div>
+    <div class="col-sm-6 col-md-3">
+      <label class="form-label">Admin</label>
+      <input type="text" class="form-control" name="admin" id="f_admin" placeholder="admin username"
+             value="{{ initial_filters.admin or '' }}">
+    </div>
+    <div class="col-12 col-md-8">
+      <label class="form-label">Search in details</label>
+      <input type="text" class="form-control" name="q" id="f_q" placeholder="type any keyword to search in details"
+             value="{{ initial_filters.q or '' }}">
+    </div>
+    <div class="col-6 col-md-2">
+      <label class="form-label">Items per page</label>
+      <select class="form-select" name="per_page" id="f_per_page">
+        {% set p = initial_filters.per_page or 20 %}
+        {% for n in [10,20,50,100,200] %}
+          <option value="{{n}}" {% if p == n %}selected{% endif %}>{{n}}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-6 col-md-2 d-flex align-items-end gap-2">
+      <button type="submit" class="btn btn-primary w-100">Apply filters</button>
+    </div>
+  </form>
+
+  <!-- Summary + actions -->
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <div>
+      <span id="totalLabel">Total: …</span>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary btn-sm" id="resetBtn" type="button">Reset</button>
+      <button class="btn btn-outline-secondary btn-sm" id="refreshBtn" type="button">Refresh</button>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="table-responsive">
+    <table class="table table-striped align-middle">
+      <thead>
+      <tr>
+        <th>Time</th>
+        <th>Admin</th>
+        <th>Action</th>
+        <th>Details</th>
+        <th>IP</th>
+      </tr>
+      </thead>
+      <tbody id="logsTbody">
+      <tr><td colspan="5" class="text-center">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <nav>
+    <ul class="pagination justify-content-center" id="pager"></ul>
+  </nav>
+</div>
+
+<script>
+(function () {
+  let currentPage = Number("{{ initial_filters.page or 1 }}") || 1;
+
+  const tbody = document.getElementById('logsTbody');
+  const pager = document.getElementById('pager');
+  const totalLabel = document.getElementById('totalLabel');
+  const form = document.getElementById('filtersForm');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const resetBtn = document.getElementById('resetBtn');
+
+  const f_admin = document.getElementById('f_admin');
+  const f_action = document.getElementById('f_action');
+  const f_date_from = document.getElementById('f_date_from');
+  const f_date_to = document.getElementById('f_date_to');
+  const f_q = document.getElementById('f_q');
+  const f_per_page = document.getElementById('f_per_page');
+
+  // Action styles map
+  const actionStyles = {
+    'login':                { icon: 'bi-box-arrow-in-right', badge: 'success' },
+    'logout':               { icon: 'bi-box-arrow-right',    badge: 'warning' },
+    'delete_admin':         { icon: 'bi-trash',              badge: 'danger' },
+    'reset_admin_password': { icon: 'bi-shield-lock',        badge: 'info' }
+  };
+
+  function getFilters() {
+    return {
+      admin: f_admin.value.trim(),
+      action: f_action.value.trim(),
+      date_from: f_date_from.value.trim(),
+      date_to: f_date_to.value.trim(),
+      q: f_q.value.trim(),
+      page: currentPage,
+      per_page: Number(f_per_page.value) || 20
+    };
+  }
+
+  function updateLocation(filters) {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== '' && v != null) params.set(k, v);
+    });
+    const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+    window.history.replaceState({}, '', newUrl);
+  }
+
+  function renderPager(page, totalPages) {
+    pager.innerHTML = '';
+    const createItem = (label, p, disabled=false, active=false) => {
+      const li = document.createElement('li');
+      li.className = `page-item ${disabled ? 'disabled' : ''} ${active ? 'active' : ''}`;
+      const a = document.createElement('a');
+      a.className = 'page-link';
+      a.href = '#';
+      a.textContent = label;
+      a.onclick = (e) => {
+        e.preventDefault();
+        if (disabled || active) return;
+        currentPage = p;
+        loadData();
+      };
+      li.appendChild(a);
+      return li;
+    };
+
+    const tp = Number(totalPages) || 1;
+    const cp = Number(page) || 1;
+
+    pager.appendChild(createItem('«', Math.max(1, cp - 1), cp === 1));
+    const start = Math.max(1, cp - 2);
+    const end = Math.min(tp, cp + 2);
+    for (let i = start; i <= end; i++) {
+      pager.appendChild(createItem(String(i), i, false, i === cp));
+    }
+    pager.appendChild(createItem('»', Math.min(tp, cp + 1), cp === tp));
+  }
+
+  function renderTable(items) {
+    if (!items || items.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="5" class="text-center">No records found.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = items.map(row => {
+      const ts = row.created_at ?? '';
+      const admin = row.admin_username ?? '';
+      const action = row.action ?? '';
+      const details = row.details ?? '';
+      const ip = row.ip_address ?? '';
+
+      // Get style for action
+      const style = actionStyles[action] || { icon: 'bi-gear', badge: 'secondary' };
+      const actionHtml = `
+        <span class="badge bg-${style.badge} text-uppercase">
+          <i class="bi ${style.icon} me-1"></i>${escapeHtml(action)}
+        </span>
+      `;
+
+      return `<tr>
+        <td>${escapeHtml(ts)}</td>
+        <td>${escapeHtml(admin)}</td>
+        <td>${actionHtml}</td>
+        <td style="max-width: 520px; white-space: pre-wrap;">${escapeHtml(details)}</td>
+        <td>${escapeHtml(ip)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function loadData() {
+    const filters = getFilters();
+    updateLocation(filters);
+
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+      if (v !== '' && v != null) params.set(k, v);
+    });
+
+    tbody.innerHTML = `<tr><td colspan="5" class="text-center">Loading…</td></tr>`;
+    try {
+      const res = await fetch('/admin-logs-data?' + params.toString(), { credentials: 'same-origin' });
+      if (!res.ok) throw new Error('Network error ' + res.status);
+      const data = await res.json();
+
+      renderTable(data.items || []);
+      totalLabel.textContent = `Total: ${data.total || 0}`;
+      renderPager(data.page || 1, data.total_pages || 1);
+      currentPage = data.page || 1;
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="5" class="text-danger text-center">Load failed: ${escapeHtml(e.message)}</td></tr>`;
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"'`=\/]/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;','=':'&#x3D;','`':'&#x60;'
+    }[c]));
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    currentPage = 1;
+    loadData();
+  });
+
+  refreshBtn.addEventListener('click', function () {
+    loadData();
+  });
+
+  resetBtn.addEventListener('click', function () {
+    f_admin.value = '';
+    f_action.value = '';
+    f_date_from.value = '';
+    f_date_to.value = '';
+    f_q.value = '';
+    currentPage = 1;
+    loadData();
+  });
+
+  loadData();
+})();
+</script>
+{% endblock %}
