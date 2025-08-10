@@ -14,6 +14,7 @@ import os
 import sys
 import logging
 from datetime import timedelta
+from notify import notify_new_user_request
 
 from flask import (
     Flask,
@@ -525,6 +526,39 @@ def admin_logs():
         initial_filters=initial_filters,
         active_page="logs",
     )
+
+@app.route("/hook/new-user-request", methods=["POST"])
+def hook_new_user_request():
+    # حماية بسيطة عبر توكن في .env
+    token = request.headers.get("X-Notify-Token") or request.args.get("token")
+    if token != os.getenv("NOTIFY_INCOMING_TOKEN"):
+        return jsonify({"ok": False, "error": "Forbidden"}), 403
+
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip()
+    name = (data.get("name") or "").strip()
+
+    if not email:
+        return jsonify({"ok": False, "error": "Missing 'email'"}), 400
+
+    # معلومات إضافية اختيارية
+    extra = {
+        "device": data.get("device_name") or data.get("device"),
+        "type": data.get("device_type") or data.get("type"),
+        "ip": request.headers.get("X-Real-IP") or request.remote_addr,
+        "uuid": data.get("device_uuid"),
+    }
+
+    ok = notify_new_user_request(
+        user_email=email,
+        user_name=name,
+        # اتركها None ليولّد notify.py التوقيت تلقائيًا UTC،
+        # أو مرّر timestamp من العميل إن رغبت:
+        # requested_at=data.get("requested_at"),
+        extra=extra
+    )
+
+    return jsonify({"ok": bool(ok)})
 
 if __name__ == "__main__":
     app.run(debug=True)
