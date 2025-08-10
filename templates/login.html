@@ -1,28 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
- <head>
+<head>
   <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>WE-APP - Login</title>
 
   <!-- Favicon / App Icons -->
-  <link rel="icon" type="image/png" sizes="16x16"
-        href="{{ url_for('static', filename='images/favicon.png') }}?v=2">
-  <link rel="icon" type="image/png" sizes="32x32"
-        href="{{ url_for('static', filename='images/favicon.png') }}?v=2">
-  <link rel="apple-touch-icon"
-        href="{{ url_for('static', filename='images/favicon.png') }}?v=2">
-  <link rel="icon" type="image/x-icon"
-        href="{{ url_for('static', filename='images/favicon.ico') }}?v=2">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='images/favicon.png') }}?v=2">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='images/favicon.png') }}?v=2">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/favicon.png') }}?v=2">
+  <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='images/favicon.ico') }}?v=2">
   <meta name="theme-color" content="#0d6efd">
 
+  <!-- Bootstrap 5.3.7 (with SRI) -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+    integrity="sha384-LN+7fdVzj6u52u30Kp6M/trliBMCMKTyK833zpbD+pXdCLuTusPj697FH4R/5mcr"
+    crossorigin="anonymous">
+
+  <!-- Fix for text-size-adjust compatibility -->
   <style>
-   @font-face {
+    body {
+      text-size-adjust: 100%;
+    }
+  </style>
+
+  <style>
+    @font-face {
       font-family: 'Century Gothic';
       src: local('Century Gothic'), local('centurygothic'),
            url('https://fonts.cdnfonts.com/s/16567/CenturyGothic.woff') format('woff');
-   }
+    }
 
-   body {
+    body {
       margin: 0;
       padding: 0;
       font-family: 'Century Gothic', sans-serif;
@@ -31,39 +42,39 @@
       display: flex;
       justify-content: center;
       align-items: center;
-   }
+    }
 
-   .login-box {
+    .login-box {
       background-color: #ffffff;
       padding: 32px 28px;
       border-radius: 20px;
       box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
       max-width: 420px;
       width: 100%;
-   }
+    }
 
-   /* ====== Brand / Logo + Title ====== */
-   .brand {
+    /* ===== Brand / Logo + Title ===== */
+    .brand {
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 10px;
       margin-bottom: 22px;
-   }
-   .brand img {
+    }
+    .brand img {
       height: 40px;
       width: auto;
       display: block;
-   }
-   .brand h2 {
+    }
+    .brand h2 {
       margin: 0;
       font-weight: bold;
       font-size: 24px;
       color: #333;
-   }
+    }
 
-   .login-box input[type="text"],
-   .login-box input[type="password"] {
+    .login-box input[type="text"],
+    .login-box input[type="password"] {
       width: 100%;
       padding: 12px;
       margin: 10px 0 16px;
@@ -72,9 +83,9 @@
       font-size: 16px;
       box-sizing: border-box;
       background-color: #f9fbff;
-   }
+    }
 
-   .login-box button {
+    .login-box button {
       width: 100%;
       background-color: #007BFF;
       color: #fff;
@@ -84,34 +95,32 @@
       border-radius: 12px;
       cursor: pointer;
       transition: background-color 0.3s ease, transform .02s ease;
-   }
-   .login-box button:hover { background-color: #0056b3; }
-   .login-box button:active { transform: translateY(1px); }
+    }
+    .login-box button:hover { background-color: #0056b3; }
+    .login-box button:active { transform: translateY(1px); }
 
-   .error {
+    .error {
       color: #d33;
       text-align: center;
       margin-bottom: 10px;
       font-size: 14px;
-   }
+    }
 
-   /* Label hidden visually but accessible to screen readers */
-   .visually-hidden {
+    /* Visually hidden but accessible to screen readers */
+    .visually-hidden {
       position: absolute !important;
       height: 1px; width: 1px;
       overflow: hidden;
       clip: rect(1px, 1px, 1px, 1px);
       white-space: nowrap;
-   }
+    }
 
-   .form-check { user-select: none; }
+    .form-check { user-select: none; }
   </style>
-  <!-- Bootstrap 5.3.3 -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
- </head>
- <body>
+</head>
+<body>
   <div class="login-box">
-    <!-- شعار التطبيق + العنوان -->
+    <!-- Brand -->
     <div class="brand">
       <img src="{{ url_for('static', filename='images/logo.png') }}?v=2" alt="WE-APP Logo"/>
       <h2>WE APP Login</h2>
@@ -128,36 +137,37 @@
       <label for="login-password" class="visually-hidden">Password</label>
       <input id="login-password" name="password" placeholder="Password" required type="password" autocomplete="current-password">
 
-      <!-- خيار تذكرني -->
+      <!-- Remember me -->
       <div class="form-check mb-3">
         <input class="form-check-input" type="checkbox" value="1" id="remember-me">
-        <label class="form-check-label" for="remember-me">
-          Remember me
-        </label>
+        <label class="form-check-label" for="remember-me">Remember me</label>
       </div>
 
       <button type="submit">Login</button>
     </form>
   </div>
 
-  <!-- Bootstrap 5.3.3 -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Bootstrap 5.3.7 (Bundle with Popper) + SRI -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"
+    integrity="sha384-ndDqU0Gzau9qJ1lfW4pNLlhNTkCfHzAVBReH9diLvGRem5+R9g2FzA8ZGN954O5Q"
+    crossorigin="anonymous"></script>
 
-  <!-- كود حفظ/تحميل اسم المستخدم وكلمة المرور -->
+  <!-- Persist username/password in localStorage when 'Remember me' is checked -->
   <script>
     document.addEventListener("DOMContentLoaded", function () {
       const usernameInput = document.getElementById("login-username");
       const passwordInput = document.getElementById("login-password");
       const rememberMeCheckbox = document.getElementById("remember-me");
 
-      // تحميل القيم المحفوظة
+      // Load saved values
       if (localStorage.getItem("rememberMe") === "true") {
         usernameInput.value = localStorage.getItem("savedUsername") || "";
         passwordInput.value = localStorage.getItem("savedPassword") || "";
         rememberMeCheckbox.checked = true;
       }
 
-      // عند إرسال النموذج
+      // On submit: save/remove values
       document.querySelector("form").addEventListener("submit", function () {
         if (rememberMeCheckbox.checked) {
           localStorage.setItem("rememberMe", "true");
@@ -171,5 +181,5 @@
       });
     });
   </script>
- </body>
+</body>
 </html>

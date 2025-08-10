@@ -97,7 +97,7 @@ def get_client_ip() -> str:
     return request.remote_addr or ""
 
 # ---------------- Auth ----------------
-@app.route("/login", methods=["GET,", "POST"])
+@app.route("/login", methods=["GET", "POST"])
 def login():
     error = None
     if request.method == "POST":

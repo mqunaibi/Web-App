@@ -22,6 +22,12 @@
     rel="stylesheet"
     integrity="sha384-LN+7fdVzj6u52u30Kp6M/trliBMCMKTyK833zpbD+pXdCLuTusPj697FH4R/5mcr"
     crossorigin="anonymous">
+
+  <!-- Fix for text-size-adjust compatibility -->
+  <style>
+    body { text-size-adjust: 100%; }
+  </style>
+
   <!-- Bootstrap Icons -->
   <link
     href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css"
@@ -87,15 +93,13 @@
            title="Change Password" aria-label="Change Password">
           <i class="bi bi-key"></i>
         </a>
-      {% endif %}
 
-      <a href="{{ url_for('newadmin.admin_dashboard') }}"
-         class="btn nav-btn {% if ep=='newadmin.admin_dashboard' or ap=='dashboard' %}active-icon{% endif %}"
-         title="Dashboard" aria-label="Dashboard">
-        <i class="bi bi-house"></i>
-      </a>
+        <a href="{{ url_for('newadmin.admin_dashboard') }}"
+           class="btn nav-btn {% if ep=='newadmin.admin_dashboard' or ap=='dashboard' %}active-icon{% endif %}"
+           title="Dashboard" aria-label="Dashboard">
+          <i class="bi bi-house"></i>
+        </a>
 
-      {% if session.get('admin_logged_in') %}
         <a href="{{ url_for('newadmin.newadmin_page') }}"
            class="btn nav-btn {% if ep=='newadmin.newadmin_page' or ap=='users' %}active-icon{% endif %}"
            title="Users" aria-label="Users">
@@ -131,7 +135,7 @@
   </div>
 </nav>
 
-<div class="container page-container mt-4">
+<div class="container page-container">
   {% block content %}{% endblock %}
 </div>
 
