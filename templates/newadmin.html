@@ -73,21 +73,40 @@
       width: 25%; text-align: center;
     }
   }
+
+  /* ====== موبايل فقط: إخفاء شريط أزرار DataTables و Show entries ====== */
+  @media (max-width: 576px){
+    .dt-buttons { display: none !important; }
+    div.dataTables_length { display: none !important; }
+  }
 </style>
 
 <div id="newadmin-container" class="container py-2">
   <!-- شريط أدوات أعلى الجدول -->
   <div id="toolbar" class="sticky-top bg-white py-2 mb-3 border rounded px-2" style="top: 70px; z-index: 10;">
     <div class="d-flex flex-wrap align-items-center gap-2">
-      <button id="btnExcel" class="btn btn-success btn-sm" title="Export to Excel">
+      <!-- أزرار التصدير: تظهر من sm وأكبر -->
+      <button id="btnExcel" class="btn btn-success btn-sm d-none d-sm-inline-flex" title="Export to Excel">
         <i class="fas fa-file-excel"></i>
       </button>
-      <button id="btnPDF" class="btn btn-danger btn-sm" title="Export to PDF">
+      <button id="btnPDF" class="btn btn-danger btn-sm d-none d-sm-inline-flex" title="Export to PDF">
         <i class="fas fa-file-pdf"></i>
       </button>
-      <button id="btnPrint" class="btn btn-secondary btn-sm" title="Print">
+      <button id="btnPrint" class="btn btn-secondary btn-sm d-none d-sm-inline-flex" title="Print">
         <i class="fas fa-print"></i>
       </button>
+
+      <!-- قائمة تصدير منسدلة للموبايل فقط -->
+      <div class="dropdown d-inline-block d-sm-none">
+        <button class="btn btn-primary btn-sm" id="exportMenuBtn" data-bs-toggle="dropdown" aria-expanded="false" title="Export">
+          <i class="fas fa-chevron-down"></i>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="exportMenuBtn">
+          <li><a class="dropdown-item" href="#" id="mExportExcel"><i class="fas fa-file-excel me-2"></i>Export to Excel</a></li>
+          <li><a class="dropdown-item" href="#" id="mExportPDF"><i class="fas fa-file-pdf me-2"></i>Export to PDF</a></li>
+          <li><a class="dropdown-item" href="#" id="mExportPrint"><i class="fas fa-print me-2"></i>Print</a></li>
+        </ul>
+      </div>
 
       <button id="refresh-btn" type="button" class="btn btn-light btn-sm ms-auto" title="Refresh">
         <i class="fas fa-sync-alt"></i>
@@ -242,6 +261,7 @@
 
 <script>
   const CAN_EDIT = ["super","limited"].includes(("{{ admin_role }}").trim().toLowerCase());
+  const IS_MOBILE = window.matchMedia('(max-width: 576px)').matches;
 
   function initDataTable(id) {
     if ($.fn.DataTable.isDataTable(id)) {
@@ -249,7 +269,10 @@
     }
     return $(id).DataTable({
       autoWidth: false,
-      dom: 'rt<"mt-2"lp>',
+      dom: IS_MOBILE ? 'rt<"mt-2"p>' : 'rt<"mt-2"lp>',
+      pageLength: IS_MOBILE ? 10 : 25,
+      lengthChange: !IS_MOBILE,
+      lengthMenu: IS_MOBILE ? [[10],[10]] : [[10,25,50,100],[10,25,50,100]],
       buttons: [
         {
           extend: 'excel',
@@ -377,7 +400,7 @@
   }
   // ============================================
 
-  /* ====== مانع عام لسلوك الأزرار + المعالجات (كما في الملف الأصلي) ====== */
+  /* ====== مانع عام لسلوك الأزرار + المعالجات ====== */
   $(document).on("click", ".action-btn", function (e) {
     e.preventDefault();
     e.stopPropagation();
@@ -421,6 +444,11 @@
     $('#btnPrint').on('click', () => { const dt = getActiveTable(); if (dt) dt.button('.buttons-print').trigger(); });
     $('#toolbarSearch').on('keyup change', function () { const dt = getActiveTable(); if (dt) dt.search(this.value).draw(); });
     $('#refresh-btn').on('click', e => { e.preventDefault(); fetchUsers(); });
+
+    // عناصر قائمة التصدير للموبايل
+    $('#mExportExcel').on('click', function(e){ e.preventDefault(); const dt = getActiveTable(); if (dt) dt.button('.buttons-excel').trigger(); });
+    $('#mExportPDF').on('click',   function(e){ e.preventDefault(); const dt = getActiveTable(); if (dt) dt.button('.buttons-pdf').trigger(); });
+    $('#mExportPrint').on('click', function(e){ e.preventDefault(); const dt = getActiveTable(); if (dt) dt.button('.buttons-print').trigger(); });
 
     // مزامنة تبويبات سطح المكتب مع قائمة الموبايل
     $(document).on('shown.bs.tab', '[data-bs-toggle="tab"]', function (ev) {
