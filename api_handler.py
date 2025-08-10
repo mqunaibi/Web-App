@@ -1,10 +1,11 @@
 # api_handler.py
 # -*- coding: utf-8 -*-
 """
-طبقة التعامل مع قاعدة البيانات وإدارة المدراء والمستخدمين.
-- تستورد get_conn() من db.py (فصل مسؤولية الاتصال).
-- يوجد مسار احتياطي (fallback) يقرأ من .env إذا لم يتوفر db.py بعد.
-- توافق مع هاشات قديمة + ترقية تلقائية إلى طريقة حديثة محددة عبر ADMIN_HASH_METHOD.
+DB interaction and admin/user management layer.
+- Uses get_conn() from db.py to centralize DB connectivity.
+- Includes a safe fallback connection using .env if db.py is not available.
+- Supports legacy password formats and auto-migrates to a modern hash
+  method defined via the ADMIN_HASH_METHOD environment variable.
 """
 
 import logging
@@ -18,14 +19,16 @@ from pymysql.cursors import DictCursor
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
 
-# تحميل متغيرات البيئة مبكرًا
+# Load environment variables early
 load_dotenv()
 
 # =========================
-# استيراد get_conn من db.py
+# Import get_conn from db.py
 # =========================
 def _fallback_get_conn():
-    """اتصال احتياطي مباشرةً من .env في حال عدم وجود db.py بعد."""
+    """
+    Fallback connection directly from .env if db.py is not present yet.
+    """
     return pymysql.connect(
         host=os.getenv("DB_HOST"),
         user=os.getenv("DB_USER"),
@@ -36,17 +39,16 @@ def _fallback_get_conn():
     )
 
 try:
-    # يُفضَّل وجود هذا الملف لديك حسب الترتيب الجديد
+    # Preferred import: a centralized DB connection
     from db import get_conn  # type: ignore
 except Exception:
-    # في حال لم تُنشئ db.py بعد، سنستخدم الاتصال الاحتياطي لضمان استمرارية العمل
+    # If db.py is not created yet, keep the app working using the fallback
     get_conn = _fallback_get_conn  # type: ignore
 
 # =========================
-# إعدادات التشفير (حديث + توافق)
+# Password hashing (modern + compatibility)
 # =========================
 HASH_METHOD = os.getenv("ADMIN_HASH_METHOD", "pbkdf2:sha256")
-
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
 
 
@@ -60,7 +62,7 @@ def _is_sha256_hex(s: str) -> bool:
 
 def _looks_like_werkzeug_hash(s: str) -> bool:
     """
-    أي هاش مدعوم من Werkzeug: يبدأ عادة بـ 'pbkdf2:' أو 'scrypt:' إلخ.
+    Quick heuristic for Werkzeug-compatible hashes (e.g., 'pbkdf2:' or 'scrypt:').
     """
     if not s:
         return False
@@ -70,14 +72,13 @@ def _looks_like_werkzeug_hash(s: str) -> bool:
 
 def _migrate_password_to_modern(admin_id: int, plain_password: str):
     """
-    ترقية كلمة المرور إلى الصيغة الحديثة المحددة في HASH_METHOD.
+    Upgrade password to the modern format specified by HASH_METHOD.
     """
     hashed = generate_password_hash(plain_password, method=HASH_METHOD)
     return execute_query(
         "UPDATE admin_users SET password = %s WHERE id = %s",
         (hashed, admin_id),
     )
-
 
 # =========================
 # DB helpers
@@ -88,9 +89,9 @@ def execute_query(
     fetch: bool = False,
 ) -> Any:
     """
-    تنفيذ الاستعلامات بشكل موحّد.
-    - fetch=True لإرجاع النتائج (قائمة قواميس).
-    - في حال الخطأ، تُعاد رسالة نصية "DB Error: <details>" للحفاظ على التوافق.
+    Unified query executor.
+    - fetch=True returns a list of dict rows.
+    - On error, returns a string "DB Error: <details>" (for compatibility).
     """
     conn = None
     result: Any = None
@@ -113,7 +114,6 @@ def execute_query(
             except Exception:
                 pass
     return result
-
 
 # =========================
 # Users (pending / approved / rejected)
@@ -143,18 +143,17 @@ def get_rejected_users():
 
 
 def approve_user(email: str):
-    logging.warning("approving user: %s", email)
+    logging.warning("Approving user: %s", email)
     return execute_query("UPDATE users SET approved = 1 WHERE email = %s", (email,))
 
 
 def reject_user(email: str):
-    logging.warning("rejecting user: %s", email)
+    logging.warning("Rejecting user: %s", email)
     return execute_query("UPDATE users SET approved = -1 WHERE email = %s", (email,))
 
 
 def delete_user(email: str):
     return execute_query("DELETE FROM users WHERE email = %s", (email,))
-
 
 # =========================
 # Admins
@@ -186,7 +185,7 @@ def get_all_admins():
 
 def add_admin_user(username: str, password: str, role: str, is_active: int):
     """
-    خزّن دائمًا بصيغة حديثة ومحددة (HASH_METHOD).
+    Always store with the modern hashing method (HASH_METHOD).
     """
     hashed = generate_password_hash(password, method=HASH_METHOD)
     return execute_query(
@@ -221,17 +220,16 @@ def toggle_admin_status(admin_id: int):
         (new_status, admin_id),
     )
 
-
 # =========================
-# Password flows (توافق + ترقية تلقائية)
+# Password/auth flows (compatibility + auto-migration)
 # =========================
 def check_admin_login(username: str, password_plain: str):
     """
-    يدعم الصيغ:
-    - أي هاش Werkzeug (pbkdf2:sha256 أو scrypt …)
-    - SHA-256 hex القديم
-    - plaintext القديم جداً
-    ويُهاجر تلقائيًا إلى HASH_METHOD عند أول نجاح.
+    Accepts and verifies:
+    - Any Werkzeug-compatible hash (pbkdf2:sha256, scrypt, etc.)
+    - Legacy SHA-256 hex
+    - Very old plaintext
+    Auto-migrates to HASH_METHOD upon first successful legacy verification.
     """
     admin = get_admin_by_username(username)
     if not admin:
@@ -241,20 +239,20 @@ def check_admin_login(username: str, password_plain: str):
     ok = False
     migrated = False
 
-    # 1) التحقق المباشر عبر Werkzeug (يدعم scrypt/pbkdf2..)
+    # 1) Werkzeug-compatible hash
     try:
         ok = check_password_hash(stored, password_plain)
     except Exception:
         ok = False
 
-    # 2) لو فشل، افحص SHA-256 hex
+    # 2) Legacy SHA-256 hex
     if not ok and _is_sha256_hex(stored):
         ok = (_sha256_hex(password_plain) == stored)
         if ok:
             _migrate_password_to_modern(admin["id"], password_plain)
             migrated = True
 
-    # 3) لو فشل، plaintext قديم
+    # 3) Very old plaintext
     if not ok and not _looks_like_werkzeug_hash(stored) and not _is_sha256_hex(stored):
         ok = (password_plain == stored)
         if ok:
@@ -289,7 +287,7 @@ def verify_admin_password(admin_id: int, current_password: str) -> bool:
 
     stored = (res[0].get("password") or "").strip()
 
-    # 1) Werkzueg
+    # 1) Werkzeug hash
     try:
         ok = check_password_hash(stored, current_password)
     except Exception:
@@ -297,14 +295,14 @@ def verify_admin_password(admin_id: int, current_password: str) -> bool:
     if ok:
         return True
 
-    # 2) SHA-256
+    # 2) Legacy SHA-256
     if _is_sha256_hex(stored):
         ok = (_sha256_hex(current_password) == stored)
         if ok:
             _migrate_password_to_modern(admin_id, current_password)
         return ok
 
-    # 3) plaintext
+    # 3) Plaintext
     if not _looks_like_werkzeug_hash(stored) and not _is_sha256_hex(stored):
         ok = (current_password == stored)
         if ok:
@@ -316,7 +314,7 @@ def verify_admin_password(admin_id: int, current_password: str) -> bool:
 
 def update_admin_password(admin_id: int, new_password: str):
     """
-    اكتب دائمًا بصيغة حديثة محددة (HASH_METHOD).
+    Always store with the modern hashing method (HASH_METHOD).
     """
     hashed = generate_password_hash(new_password, method=HASH_METHOD)
     return execute_query(
@@ -324,13 +322,12 @@ def update_admin_password(admin_id: int, new_password: str):
         (hashed, admin_id),
     )
 
-
 # =========================
 # Activity Log
 # =========================
 def log_admin_action(username: str, action: str, details: str = "", ip: str = "") -> bool:
     """
-    سجل عملية مشرف في جدول admin_activity_log.
+    Insert an admin action into admin_activity_log.
     """
     query = """
         INSERT INTO admin_activity_log (admin_username, action, details, ip_address)
