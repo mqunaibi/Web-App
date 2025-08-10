@@ -1,80 +1,77 @@
+# api_handler.py
+# -*- coding: utf-8 -*-
+"""
+طبقة التعامل مع قاعدة البيانات وإدارة المدراء والمستخدمين.
+- تستورد get_conn() من db.py (فصل مسؤولية الاتصال).
+- يوجد مسار احتياطي (fallback) يقرأ من .env إذا لم يتوفر db.py بعد.
+- توافق مع هاشات قديمة + ترقية تلقائية إلى طريقة حديثة محددة عبر ADMIN_HASH_METHOD.
+"""
+
 import logging
 import os
 import re
 import hashlib
-import pymysql
-from dotenv import load_dotenv
+from typing import Any, Dict, List, Optional, Tuple
 
-# Hashing (حديث) + توافق قديم
+import pymysql
+from pymysql.cursors import DictCursor
+from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
 
+# تحميل متغيرات البيئة مبكرًا
 load_dotenv()
 
-DB_HOST = os.getenv("DB_HOST")
-DB_NAME = os.getenv("DB_NAME")
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
+# =========================
+# استيراد get_conn من db.py
+# =========================
+def _fallback_get_conn():
+    """اتصال احتياطي مباشرةً من .env في حال عدم وجود db.py بعد."""
+    return pymysql.connect(
+        host=os.getenv("DB_HOST"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        database=os.getenv("DB_NAME"),
+        charset="utf8mb4",
+        cursorclass=DictCursor,
+    )
 
-# اختر خوارزمية التخزين الحديثة بشكل صريح (متسق دائماً)
+try:
+    # يُفضَّل وجود هذا الملف لديك حسب الترتيب الجديد
+    from db import get_conn  # type: ignore
+except Exception:
+    # في حال لم تُنشئ db.py بعد، سنستخدم الاتصال الاحتياطي لضمان استمرارية العمل
+    get_conn = _fallback_get_conn  # type: ignore
+
+# =========================
+# إعدادات التشفير (حديث + توافق)
+# =========================
 HASH_METHOD = os.getenv("ADMIN_HASH_METHOD", "pbkdf2:sha256")
 
-# =========================
-# DB helpers
-# =========================
-def get_db_connection():
-    try:
-        return pymysql.connect(
-            host=DB_HOST,
-            user=DB_USER,
-            password=DB_PASSWORD,
-            database=DB_NAME,
-            cursorclass=pymysql.cursors.DictCursor,
-        )
-    except pymysql.MySQLError as e:
-        print(f"✗ Connection Error: {e}")
-        return None
-
-
-def execute_query(query, params=None, fetch=False):
-    conn = get_db_connection()
-    result = None
-    try:
-        with conn.cursor() as cursor:
-            cursor.execute(query, params or ())
-            if fetch:
-                result = cursor.fetchall()
-            else:
-                result = True
-        conn.commit()
-    except Exception as e:
-        print(f"✗ Query Error: {e}")
-        result = f"DB Error: {e}"
-    finally:
-        if conn:
-            conn.close()
-    return result
-
-
-# =========================
-# Hashing compatibility
-# =========================
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$", re.IGNORECASE)
+
 
 def _sha256_hex(s: str) -> str:
     return hashlib.sha256(s.encode()).hexdigest()
 
+
 def _is_sha256_hex(s: str) -> bool:
     return bool(s) and bool(HEX64_RE.fullmatch(s.strip()))
 
+
 def _looks_like_werkzeug_hash(s: str) -> bool:
-    """أي هاش مدعوم من Werkzeug: يبدأ عادة بـ 'pbkdf2:' أو 'scrypt:' إلخ."""
+    """
+    أي هاش مدعوم من Werkzeug: يبدأ عادة بـ 'pbkdf2:' أو 'scrypt:' إلخ.
+    """
     if not s:
         return False
     s = s.strip().lower()
     return s.startswith("pbkdf2:") or s.startswith("scrypt:")
 
+
 def _migrate_password_to_modern(admin_id: int, plain_password: str):
-    """ترقية كلمة المرور إلى الصيغة الحديثة المحددة في HASH_METHOD."""
+    """
+    ترقية كلمة المرور إلى الصيغة الحديثة المحددة في HASH_METHOD.
+    """
     hashed = generate_password_hash(plain_password, method=HASH_METHOD)
     return execute_query(
         "UPDATE admin_users SET password = %s WHERE id = %s",
@@ -83,7 +80,43 @@ def _migrate_password_to_modern(admin_id: int, plain_password: str):
 
 
 # =========================
-# Users (pending/approved/rejected)
+# DB helpers
+# =========================
+def execute_query(
+    query: str,
+    params: Optional[Tuple[Any, ...]] = None,
+    fetch: bool = False,
+) -> Any:
+    """
+    تنفيذ الاستعلامات بشكل موحّد.
+    - fetch=True لإرجاع النتائج (قائمة قواميس).
+    - في حال الخطأ، تُعاد رسالة نصية "DB Error: <details>" للحفاظ على التوافق.
+    """
+    conn = None
+    result: Any = None
+    try:
+        conn = get_conn()
+        with conn.cursor() as cursor:
+            cursor.execute(query, params or ())
+            if fetch:
+                result = cursor.fetchall()
+            else:
+                result = True
+        conn.commit()
+    except Exception as e:
+        logging.exception("✗ Query Error while executing: %s", query)
+        result = f"DB Error: {e}"
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    return result
+
+
+# =========================
+# Users (pending / approved / rejected)
 # =========================
 def get_pending_users():
     return execute_query(
@@ -92,12 +125,14 @@ def get_pending_users():
         fetch=True,
     )
 
+
 def get_approved_users():
     return execute_query(
         "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid "
         "FROM users WHERE approved = 1",
         fetch=True,
     )
+
 
 def get_rejected_users():
     return execute_query(
@@ -106,22 +141,25 @@ def get_rejected_users():
         fetch=True,
     )
 
-def approve_user(email):
-    logging.warning(f"approving user: {email}")
+
+def approve_user(email: str):
+    logging.warning("approving user: %s", email)
     return execute_query("UPDATE users SET approved = 1 WHERE email = %s", (email,))
 
-def reject_user(email):
-    logging.warning(f"rejecting user: {email}")
+
+def reject_user(email: str):
+    logging.warning("rejecting user: %s", email)
     return execute_query("UPDATE users SET approved = -1 WHERE email = %s", (email,))
 
-def delete_user(email):
+
+def delete_user(email: str):
     return execute_query("DELETE FROM users WHERE email = %s", (email,))
 
 
 # =========================
 # Admins
 # =========================
-def get_admin_by_id(admin_id):
+def get_admin_by_id(admin_id: int) -> Optional[Dict[str, Any]]:
     res = execute_query(
         "SELECT id, username, role, is_active FROM admin_users WHERE id = %s",
         (admin_id,),
@@ -129,7 +167,8 @@ def get_admin_by_id(admin_id):
     )
     return res[0] if res else None
 
-def get_admin_by_username(username: str):
+
+def get_admin_by_username(username: str) -> Optional[Dict[str, Any]]:
     res = execute_query(
         "SELECT id, username, password, role, is_active FROM admin_users WHERE username = %s",
         (username,),
@@ -137,14 +176,18 @@ def get_admin_by_username(username: str):
     )
     return res[0] if res else None
 
+
 def get_all_admins():
     return execute_query(
         "SELECT id, username, role, is_active, created_at FROM admin_users ORDER BY id",
         fetch=True,
     )
 
-def add_admin_user(username, password, role, is_active):
-    """خزّن دائمًا بصيغة حديثة ومحددة (HASH_METHOD)."""
+
+def add_admin_user(username: str, password: str, role: str, is_active: int):
+    """
+    خزّن دائمًا بصيغة حديثة ومحددة (HASH_METHOD).
+    """
     hashed = generate_password_hash(password, method=HASH_METHOD)
     return execute_query(
         "INSERT INTO admin_users (username, password, role, is_active, created_at) "
@@ -152,16 +195,19 @@ def add_admin_user(username, password, role, is_active):
         (username, hashed, role, is_active),
     )
 
-def update_admin_user(admin_id, username, role, is_active):
+
+def update_admin_user(admin_id: int, username: str, role: str, is_active: int):
     return execute_query(
         "UPDATE admin_users SET username = %s, role = %s, is_active = %s WHERE id = %s",
         (username, role, is_active, admin_id),
     )
 
-def delete_admin_user(admin_id):
+
+def delete_admin_user(admin_id: int):
     return execute_query("DELETE FROM admin_users WHERE id = %s", (admin_id,))
 
-def toggle_admin_status(admin_id):
+
+def toggle_admin_status(admin_id: int):
     res = execute_query(
         "SELECT is_active FROM admin_users WHERE id = %s",
         (admin_id,),
@@ -182,9 +228,9 @@ def toggle_admin_status(admin_id):
 def check_admin_login(username: str, password_plain: str):
     """
     يدعم الصيغ:
-      - أي هاش Werkzeug (pbkdf2:sha256 أو scrypt …)
-      - SHA-256 hex القديم
-      - plaintext القديم جداً
+    - أي هاش Werkzeug (pbkdf2:sha256 أو scrypt …)
+    - SHA-256 hex القديم
+    - plaintext القديم جداً
     ويُهاجر تلقائيًا إلى HASH_METHOD عند أول نجاح.
     """
     admin = get_admin_by_username(username)
@@ -195,7 +241,7 @@ def check_admin_login(username: str, password_plain: str):
     ok = False
     migrated = False
 
-    # 1) حاول مباشرةً مع check_password_hash (يدعم scrypt/pbkdf2..)
+    # 1) التحقق المباشر عبر Werkzeug (يدعم scrypt/pbkdf2..)
     try:
         ok = check_password_hash(stored, password_plain)
     except Exception:
@@ -205,22 +251,29 @@ def check_admin_login(username: str, password_plain: str):
     if not ok and _is_sha256_hex(stored):
         ok = (_sha256_hex(password_plain) == stored)
         if ok:
-            _migrate_password_to_modern(admin["id"], password_plain); migrated = True
+            _migrate_password_to_modern(admin["id"], password_plain)
+            migrated = True
 
-    # 3) لو فشل، افحص plaintext قديم
+    # 3) لو فشل، plaintext قديم
     if not ok and not _looks_like_werkzeug_hash(stored) and not _is_sha256_hex(stored):
         ok = (password_plain == stored)
         if ok:
-            _migrate_password_to_modern(admin["id"], password_plain); migrated = True
+            _migrate_password_to_modern(admin["id"], password_plain)
+            migrated = True
 
     if not ok:
         return None, "Invalid username or password"
+
     if not admin.get("is_active", 0):
         return None, "Account is inactive"
 
     if migrated:
-        logging.info("Password migrated to modern hash (%s) for user %s (id=%s)",
-                     HASH_METHOD, admin["username"], admin["id"])
+        logging.info(
+            "Password migrated to modern hash (%s) for user %s (id=%s)",
+            HASH_METHOD,
+            admin["username"],
+            admin["id"],
+        )
 
     return admin, None
 
@@ -233,9 +286,10 @@ def verify_admin_password(admin_id: int, current_password: str) -> bool:
     )
     if not res:
         return False
+
     stored = (res[0].get("password") or "").strip()
 
-    # 1) حاول مباشرةً مع check_password_hash
+    # 1) Werkzueg
     try:
         ok = check_password_hash(stored, current_password)
     except Exception:
@@ -261,16 +315,22 @@ def verify_admin_password(admin_id: int, current_password: str) -> bool:
 
 
 def update_admin_password(admin_id: int, new_password: str):
-    """اكتب دائمًا بصيغة حديثة محددة (HASH_METHOD)."""
+    """
+    اكتب دائمًا بصيغة حديثة محددة (HASH_METHOD).
+    """
     hashed = generate_password_hash(new_password, method=HASH_METHOD)
     return execute_query(
         "UPDATE admin_users SET password = %s WHERE id = %s",
         (hashed, admin_id),
     )
 
-def log_admin_action(username, action, details="", ip=""):
+
+# =========================
+# Activity Log
+# =========================
+def log_admin_action(username: str, action: str, details: str = "", ip: str = "") -> bool:
     """
-    سجل عملية مشرف في جدول admin_activity_log
+    سجل عملية مشرف في جدول admin_activity_log.
     """
     query = """
         INSERT INTO admin_activity_log (admin_username, action, details, ip_address)
@@ -280,5 +340,5 @@ def log_admin_action(username, action, details="", ip=""):
         execute_query(query, (username, action, details, ip))
         return True
     except Exception as e:
-        print(f"Error logging admin action: {e}")
+        logging.error("Error logging admin action: %s", e)
         return False
