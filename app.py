@@ -43,6 +43,9 @@ from api_handler import (
     update_admin_password,
     # DB activity log
     log_admin_action,
+    # NEW: pending notify helpers
+    get_users_pending_email_notifications,
+    mark_user_email_notified,
 )
 from auth_utils import require_roles
 
@@ -613,6 +616,95 @@ def hook_new_user_request():
     if ok:
         return jsonify({"ok": True, "message": "Notification sent."})
     return jsonify({"ok": False, "error": "Failed to send email"}), 500
+
+
+# ---------------- Task: notify pending DB registrations ----------------
+@app.route("/tasks/notify-pending", methods=["POST", "GET"])
+def tasks_notify_pending():
+    """
+    Processes new pending users (approved=0 & not notified) and sends email notifications.
+    GET -> shows usage (no sending)
+    POST -> requires TASKS_TOKEN (Bearer or X-Tasks-Token) then processes up to 'limit'
+    """
+    TASKS_TOKEN = os.getenv("TASKS_TOKEN", "").strip()
+
+    if request.method == "GET":
+        return jsonify({
+            "message": "Use POST with token to process pending user notifications.",
+            "headers": {
+                "Authorization": "Bearer <TASKS_TOKEN>",
+                "X-Tasks-Token": "<TASKS_TOKEN>",
+                "Content-Type": "application/json"
+            },
+            "body_example": {"limit": 50}
+        })
+
+    if not TASKS_TOKEN:
+        app.logger.error("TASKS_TOKEN not set")
+        return jsonify({"ok": False, "error": "Server not configured"}), 500
+
+    # Token check (Bearer or header or query)
+    auth_hdr = (request.headers.get("Authorization") or "").strip()
+    x_token = (request.headers.get("X-Tasks-Token") or "").strip()
+    q_token = (request.args.get("token") or "").strip()
+    supplied = ""
+    if auth_hdr.lower().startswith("bearer "):
+        supplied = auth_hdr.split(None, 1)[1].strip()
+    elif x_token:
+        supplied = x_token
+    elif q_token:
+        supplied = q_token
+    if supplied != TASKS_TOKEN:
+        app.logger.warning("tasks_notify_pending: unauthorized from %s", get_client_ip())
+        return jsonify({"ok": False, "error": "Forbidden"}), 403
+
+    # Optional JSON body
+    try:
+        payload = request.get_json(silent=True) or {}
+    except Exception:
+        payload = {}
+    try:
+        limit = int(payload.get("limit", 50))
+        if limit <= 0 or limit > 500:
+            limit = 50
+    except Exception:
+        limit = 50
+
+    # Fetch pending users not notified
+    rows = get_users_pending_email_notifications(limit=limit) or []
+    if not rows or isinstance(rows, str):
+        # In case of DB error, rows may be a string
+        if isinstance(rows, str):
+            app.logger.error("tasks_notify_pending DB error: %s", rows)
+            return jsonify({"ok": False, "error": "DB error"}), 500
+        return jsonify({"ok": True, "processed": 0, "message": "No pending users to notify"})
+
+    processed = 0
+    for u in rows:
+        email = (u.get("email") or "").strip()
+        if not email:
+            continue
+        ok = notify_new_user_request(
+            user_email=email,
+            user_name="",  # name not stored — keep empty
+            device_name=u.get("device_name") or "",
+            device_uuid=u.get("device_uuid") or "",
+            ip_address=u.get("ip_address") or "",
+            extra={
+                "phone": u.get("phone") or "",
+                "device_type": u.get("device_type") or "",
+                "registered_at": str(u.get("created_at") or ""),
+            },
+            admin_panel_url=ADMIN_PANEL_URL,
+        )
+        if ok:
+            mark_user_email_notified(email)
+            processed += 1
+        else:
+            app.logger.error("Email notify failed for user=%s", email)
+
+    return jsonify({"ok": True, "processed": processed})
+
 
 if __name__ == "__main__":
     app.run(debug=True)
