@@ -1,120 +1,209 @@
 # notify.py
 # -*- coding: utf-8 -*-
 """
-Lightweight email notifications.
-
-Reads SMTP settings from environment variables:
-  SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD,
-  SMTP_USE_TLS, SMTP_USE_SSL, NOTIFY_TO, NOTIFY_FROM
-
-Exposes:
-  - notify_new_user_request(user_email, user_name="", requested_at=None, extra=None) -> bool
+Email notification service for: 'New user approval requested'
+- Reads SMTP settings from .env (TLS/SSL)
+- To/From from .env; also supports NOTIFY_CC / NOTIFY_BCC
+- Optional branding logo via LOGO_URL
+- Backward/forward compatible parameter names:
+    email/user_email, name/user_name
 """
 
 import os
-import smtplib
 import logging
-from email.mime.text import MIMEText
-from email.utils import formataddr, make_msgid
-from email.header import Header
-from datetime import datetime
+import smtplib
+from email.message import EmailMessage
+from typing import List, Optional, Dict, Any
+from dotenv import load_dotenv
 
+load_dotenv()
 
-def _get_bool(name: str, default: bool = False) -> bool:
-    val = (os.getenv(name, "").strip() or "").lower()
-    if val in ("1", "true", "yes", "y", "on"):
-        return True
-    if val in ("0", "false", "no", "n", "off"):
+# SMTP
+SMTP_HOST = (os.getenv("SMTP_HOST") or "").strip()
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587") or 587)
+SMTP_USER = (os.getenv("SMTP_USER") or "").strip()
+SMTP_PASSWORD = (os.getenv("SMTP_PASSWORD") or "").strip()
+SMTP_USE_TLS = (os.getenv("SMTP_USE_TLS", "1").strip() == "1")
+SMTP_USE_SSL = (os.getenv("SMTP_USE_SSL", "0").strip() == "1")
+
+# Addresses
+NOTIFY_FROM = (os.getenv("NOTIFY_FROM") or SMTP_USER or "").strip()
+DEFAULT_TO = (os.getenv("NOTIFY_TO") or "").strip()
+
+# Branding / Copies
+ADMIN_PANEL_URL = (os.getenv("ADMIN_PANEL_URL") or "/newadmin").strip()
+LOGO_URL = (os.getenv("LOGO_URL") or "").strip()
+NOTIFY_CC_ENV = (os.getenv("NOTIFY_CC") or "").strip()
+NOTIFY_BCC_ENV = (os.getenv("NOTIFY_BCC") or "").strip()
+
+def _split_emails(s: str) -> List[str]:
+    if not s:
+        return []
+    # allow comma or semicolon separated, and trim spaces
+    return [p.strip() for p in s.replace(";", ",").split(",") if p.strip()]
+
+def _connect_smtp():
+    if not SMTP_HOST:
+        raise RuntimeError("SMTP_HOST is not configured.")
+    if SMTP_USE_SSL:
+        server = smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, timeout=30)
+    else:
+        server = smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30)
+        if SMTP_USE_TLS:
+            server.starttls()
+    if SMTP_USER:
+        server.login(SMTP_USER, SMTP_PASSWORD)
+    return server
+
+def send_email(
+    subject: str,
+    html_body: str,
+    text_body: Optional[str] = None,
+    to: Optional[List[str]] = None,
+    cc: Optional[List[str]] = None,
+    bcc: Optional[List[str]] = None,
+    from_addr: Optional[str] = None,
+) -> bool:
+    """Low-level sender used by helpers below."""
+    to = to or _split_emails(DEFAULT_TO)
+    cc = cc or _split_emails(NOTIFY_CC_ENV)
+    bcc = bcc or _split_emails(NOTIFY_BCC_ENV)
+
+    if not to:
+        logging.error("Notification failed: no recipients (NOTIFY_TO is empty).")
         return False
-    return default
 
-
-def _smtp_config():
-    return {
-        "host": os.getenv("SMTP_HOST", "").strip(),
-        "port": int(os.getenv("SMTP_PORT", "587")),
-        "user": os.getenv("SMTP_USER", "").strip(),
-        "password": os.getenv("SMTP_PASSWORD", "").strip(),
-        "use_tls": _get_bool("SMTP_USE_TLS", True),
-        "use_ssl": _get_bool("SMTP_USE_SSL", False),
-        "notify_to": [e.strip() for e in os.getenv("NOTIFY_TO", "").split(",") if e.strip()],
-        "notify_from": os.getenv("NOTIFY_FROM", os.getenv("SMTP_USER", "no-reply@localhost")),
-    }
-
-
-def _send_email(subject: str, body: str, to_list: list) -> bool:
-    cfg = _smtp_config()
-    if not cfg["host"] or not to_list:
-        logging.warning("[notify] Missing SMTP_HOST or recipients.")
+    from_addr = (from_addr or NOTIFY_FROM or SMTP_USER).strip()
+    if not from_addr:
+        logging.error("Notification failed: sender address not set (NOTIFY_FROM/SMTP_USER).")
         return False
 
-    msg = MIMEText(body, _charset="utf-8")
-    try:
-        msg["Subject"] = str(Header(subject, "utf-8"))
-    except Exception:
-        msg["Subject"] = subject
+    if not text_body:
+        # crude fallback: strip tags for text part
+        import re
+        text_body = re.sub(r"<[^>]+>", "", html_body or "").strip()
 
-    sender = cfg["notify_from"]
-    msg["From"] = formataddr((sender, sender)) if "<" not in sender else sender
-    msg["To"] = ", ".join(to_list)
-    msg["Message-ID"] = make_msgid()
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = from_addr
+    msg["To"] = ", ".join(to)
+    if cc:
+        msg["Cc"] = ", ".join(cc)
 
+    msg.set_content(text_body or "")
+    msg.add_alternative(html_body or "", subtype="html")
+
+    recipients = list(to) + (cc or []) + (bcc or [])
     try:
-        if cfg["use_ssl"]:
-            # SSL connection with context manager and timeout
-            with smtplib.SMTP_SSL(cfg["host"], cfg["port"], timeout=15) as server:
-                server.ehlo()
-                if cfg["user"]:
-                    server.login(cfg["user"], cfg["password"])
-                server.sendmail(sender, to_list, msg.as_string())
-        else:
-            # STARTTLS (if enabled) with context manager and timeout
-            with smtplib.SMTP(cfg["host"], cfg["port"], timeout=15) as server:
-                server.ehlo()
-                if cfg["use_tls"]:
-                    server.starttls()
-                    server.ehlo()
-                if cfg["user"]:
-                    server.login(cfg["user"], cfg["password"])
-                server.sendmail(sender, to_list, msg.as_string())
+        with _connect_smtp() as smtp:
+            smtp.send_message(msg, from_addr=from_addr, to_addrs=recipients)
+        logging.info("Notification email sent to: %s", recipients)
         return True
     except Exception as e:
-        logging.warning("[notify] Email send failed: %s", e)
+        logging.exception("Failed to send email: %s", e)
         return False
-
 
 def notify_new_user_request(
-    user_email: str,
-    user_name: str = "",
-    requested_at: str = None,
-    extra: dict = None
+    # Compatible names
+    email: Optional[str] = None,
+    user_email: Optional[str] = None,
+    name: Optional[str] = None,
+    user_name: Optional[str] = None,
+
+    # Optional metadata
+    device_name: str = "",
+    device_uuid: str = "",
+    ip_address: str = "",
+    requested_at: Optional[str] = None,
+    extra: Optional[Dict[str, Any]] = None,
+
+    # Optional override
+    admin_panel_url: Optional[str] = None,
 ) -> bool:
-    """
-    Sends an email notification about a new user approval request.
-    Returns True on success, False otherwise.
-    """
-    cfg = _smtp_config()
-    to_list = cfg["notify_to"]
-    if not to_list:
-        logging.warning("[notify] NOTIFY_TO is empty; skipping.")
+    """Sends a styled 'New user approval request' email."""
+    who_email = (email or user_email or "").strip()
+    who_name = (user_name or name or "").strip()
+    if not who_email:
+        logging.error("notify_new_user_request: missing email/user_email")
         return False
 
-    ts = requested_at or datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
+    extra = extra or {}
+    device_name = (device_name or extra.get("device_name") or extra.get("device") or "").strip()
+    device_uuid = (device_uuid or extra.get("device_uuid") or extra.get("uuid") or "").strip()
+    ip_address = (ip_address or extra.get("ip") or "").strip()
 
-    subject = "[WE-APP] New user approval requested"
-    lines = [
-        "A new user approval has been requested:",
-        f"Name:  {user_name or '(not provided)'}",
-        f"Email: {user_email}",
-        f"Requested at: {ts}",
-    ]
-    if extra:
-        lines.append("---- Extra ----")
-        for k, v in extra.items():
-            lines.append(f"{k}: {v}")
+    admin_link = (admin_panel_url or ADMIN_PANEL_URL or "/newadmin").strip()
 
-    lines.append("")
-    lines.append("Actions: Please review in Admin Panel (Approve / Reject)")
+    subject = f"[WE APP] New user approval request: {who_email}"
+    brand_dark = "#0d6efd"
+    brand_light = "#e9f2ff"
 
-    body = "\n".join(lines)
-    return _send_email(subject, body, to_list)
+    logo_block = f"""
+      <tr>
+        <td style="padding:18px 24px 0 24px">
+          <img src="{LOGO_URL}" alt="Logo" style="max-width:160px;height:auto;display:block">
+        </td>
+      </tr>
+    """ if LOGO_URL else ""
+
+    # Build detail rows
+    details_rows = []
+    if who_name:
+        details_rows.append(f"<tr><td style='padding:4px 0'><strong>Name:</strong> {who_name}</td></tr>")
+    details_rows.append(f"<tr><td style='padding:4px 0'><strong>Email:</strong> {who_email}</td></tr>")
+    details_rows.append(f"<tr><td style='padding:4px 0'><strong>Device Name:</strong> {device_name or 'N/A'}</td></tr>")
+    details_rows.append(f"<tr><td style='padding:4px 0'><strong>Device UUID:</strong> {device_uuid or 'N/A'}</td></tr>")
+    details_rows.append(f"<tr><td style='padding:4px 0'><strong>IP Address:</strong> {ip_address or 'N/A'}</td></tr>")
+    if requested_at:
+        details_rows.append(f"<tr><td style='padding:4px 0'><strong>Requested At:</strong> {requested_at}</td></tr>")
+
+    # Append extra (ignore keys already displayed)
+    for k, v in extra.items():
+        if k in {"device_name", "device", "device_uuid", "uuid", "ip"}:
+            continue
+        details_rows.append(f"<tr><td style='padding:4px 0'><strong>{k}:</strong> {v}</td></tr>")
+
+    html = f"""
+    <div style="background:{brand_light};padding:24px 16px;font-family:Arial,Helvetica,sans-serif;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;margin:auto;background:#fff;border-radius:14px;box-shadow:0 10px 30px rgba(13,110,253,.08);overflow:hidden">
+        {logo_block}
+        <tr>
+          <td style="padding:20px 24px 0 24px">
+            <h2 style="margin:0 0 8px;font-size:20px;color:{brand_dark};letter-spacing:.3px">New user approval request</h2>
+            <p style="margin:0;color:#111;font-size:14px;line-height:1.6">
+              Below are the details for the new user awaiting approval:
+            </p>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:12px 24px">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;line-height:1.6;color:#111">
+              {''.join(details_rows)}
+            </table>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:16px 24px 24px 24px">
+            <a href="{admin_link}" target="_blank" rel="noopener"
+               style="display:inline-block;background:{brand_dark};color:#fff;text-decoration:none;
+                      padding:12px 18px;border-radius:999px;font-size:14px">
+              Open Admin Panel
+            </a>
+            <div style="font-size:12px;color:#666;margin-top:10px">
+              Or copy & paste: <span style="color:#0a58ca">{admin_link}</span>
+            </div>
+          </td>
+        </tr>
+
+        <tr>
+          <td style="padding:14px 24px;border-top:1px solid #eef2f7;color:#666;font-size:12px">
+            This message was generated automatically by WE APP.
+          </td>
+        </tr>
+      </table>
+    </div>
+    """
+
+    return send_email(subject=subject, html_body=html)

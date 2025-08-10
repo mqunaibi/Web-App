@@ -392,7 +392,7 @@ def admin_reset_password(admin_id):
             app.logger.warning("Reset password failed (short password) by super=%s for id=%s", user, admin_id)
             return jsonify({"ok": False, "error": "Password must be at least 8 characters."}), 400
         if new_password != confirm:
-            app.logger.warning("Reset password failed (mismatch) by super=%s for id=%s", user, admin_id)
+            app.logger.warning("Reset password failed (mismatch) by super=%s for id=%s", user, role, admin_id)
             return jsonify({"ok": False, "error": "Passwords do not match."}), 400
 
         res = update_admin_password(admin_id, new_password)
@@ -527,38 +527,92 @@ def admin_logs():
         active_page="logs",
     )
 
-@app.route("/hook/new-user-request", methods=["POST"])
+# ---------------- New user request webhook (enhanced) ----------------
+# Read once at module import (avoids re-reading env each request)
+NOTIFY_INCOMING_TOKEN = os.getenv("NOTIFY_INCOMING_TOKEN", "").strip()
+ADMIN_PANEL_URL = os.getenv("ADMIN_PANEL_URL", "/newadmin").strip()
+
+@app.route("/hook/new-user-request", methods=["POST", "GET"])
 def hook_new_user_request():
-    # حماية بسيطة عبر توكن في .env
-    token = request.headers.get("X-Notify-Token") or request.args.get("token")
-    if token != os.getenv("NOTIFY_INCOMING_TOKEN"):
+    """
+    Secure webhook to trigger the admin email when a new user requests approval.
+    GET  -> returns usage (does NOT send email)
+    POST -> validates token then sends the notification
+    """
+    # -------- GET: quick usage for browsers --------
+    if request.method == "GET":
+        return jsonify({
+            "message": "Use POST to send a 'New user approval' notification.",
+            "usage": {
+                "method": "POST",
+                "url": "/hook/new-user-request",
+                "headers": {
+                    "Content-Type": "application/json",
+                    "X-Notify-Token": "<token> (or Authorization: Bearer <token>)"
+                },
+                "body_example": {
+                    "email": "user@example.com",
+                    "name": "Full Name",
+                    "device_name": "Device model",
+                    "device_uuid": "unique-device-id",
+                    "extra": {"app_version": "1.0.0", "platform": "Android"}
+                }
+            }
+        })
+
+    # -------- POST: token verification --------
+    if not NOTIFY_INCOMING_TOKEN:
+        app.logger.error("Webhook refused: NOTIFY_INCOMING_TOKEN not set.")
+        return jsonify({"ok": False, "error": "Server not configured"}), 500
+
+    auth_hdr = (request.headers.get("Authorization") or "").strip()
+    x_token = (request.headers.get("X-Notify-Token") or "").strip()
+    q_token = (request.args.get("token") or "").strip()
+
+    supplied = ""
+    if auth_hdr.lower().startswith("bearer "):
+        supplied = auth_hdr.split(None, 1)[1].strip()
+    elif x_token:
+        supplied = x_token
+    elif q_token:
+        supplied = q_token
+
+    if supplied != NOTIFY_INCOMING_TOKEN:
+        app.logger.warning("Webhook unauthorized from %s", get_client_ip())
         return jsonify({"ok": False, "error": "Forbidden"}), 403
 
-    data = request.get_json(silent=True) or {}
+    # -------- Read payload --------
+    try:
+        data = request.get_json(force=True, silent=False) or {}
+    except Exception:
+        return jsonify({"ok": False, "error": "Invalid JSON"}), 400
+
     email = (data.get("email") or "").strip()
     name = (data.get("name") or "").strip()
+    device_name = (data.get("device_name") or data.get("device") or "").strip()
+    device_uuid = (data.get("device_uuid") or "").strip()
+    extra = data.get("extra") or {}
 
     if not email:
         return jsonify({"ok": False, "error": "Missing 'email'"}), 400
 
-    # معلومات إضافية اختيارية
-    extra = {
-        "device": data.get("device_name") or data.get("device"),
-        "type": data.get("device_type") or data.get("type"),
-        "ip": request.headers.get("X-Real-IP") or request.remote_addr,
-        "uuid": data.get("device_uuid"),
-    }
+    # client IP behind proxy
+    ip_address = get_client_ip()
 
+    # -------- Send email --------
     ok = notify_new_user_request(
         user_email=email,
         user_name=name,
-        # اتركها None ليولّد notify.py التوقيت تلقائيًا UTC،
-        # أو مرّر timestamp من العميل إن رغبت:
-        # requested_at=data.get("requested_at"),
-        extra=extra
+        device_name=device_name,
+        device_uuid=device_uuid,
+        ip_address=ip_address,
+        extra=extra,
+        admin_panel_url=ADMIN_PANEL_URL,
     )
 
-    return jsonify({"ok": bool(ok)})
+    if ok:
+        return jsonify({"ok": True, "message": "Notification sent."})
+    return jsonify({"ok": False, "error": "Failed to send email"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
