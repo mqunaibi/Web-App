@@ -195,7 +195,7 @@ def mark_user_email_notified(email: str):
 # =========================
 def get_admin_by_id(admin_id: int) -> Optional[Dict[str, Any]]:
     res = execute_query(
-        "SELECT id, username, role, is_active FROM admin_users WHERE id = %s",
+        "SELECT id, username, role, is_active, email FROM admin_users WHERE id = %s",
         (admin_id,),
         fetch=True,
     )
@@ -211,24 +211,37 @@ def get_admin_by_username(username: str) -> Optional[Dict[str, Any]]:
 
 def get_all_admins():
     return execute_query(
-        "SELECT id, username, role, is_active, created_at FROM admin_users ORDER BY id",
+        "SELECT id, username, role, is_active, email, created_at FROM admin_users ORDER BY id",
         fetch=True,
     )
 
-def add_admin_user(username: str, password: str, role: str, is_active: int):
+def add_admin_user(username: str, password: str, role: str, is_active: int, email: str | None = None):
     """Always store with the modern hashing method (HASH_METHOD)."""
     hashed = generate_password_hash(password, method=HASH_METHOD)
-    return execute_query(
-        "INSERT INTO admin_users (username, password, role, is_active, created_at) "
-        "VALUES (%s, %s, %s, %s, NOW())",
-        (username, hashed, role, is_active),
-    )
+    if email is None:
+        return execute_query(
+            "INSERT INTO admin_users (username, password, role, is_active, created_at) "
+            "VALUES (%s, %s, %s, %s, NOW())",
+            (username, hashed, role, is_active),
+        )
+    else:
+        return execute_query(
+            "INSERT INTO admin_users (username, email, password, role, is_active, created_at) "
+            "VALUES (%s, %s, %s, %s, %s, NOW())",
+            (username, email, hashed, role, is_active),
+        )
 
-def update_admin_user(admin_id: int, username: str, role: str, is_active: int):
-    return execute_query(
-        "UPDATE admin_users SET username = %s, role = %s, is_active = %s WHERE id = %s",
-        (username, role, is_active, admin_id),
-    )
+def update_admin_user(admin_id: int, username: str, role: str, is_active: int, email: str | None = None):
+    if email is None:
+        return execute_query(
+            "UPDATE admin_users SET username = %s, role = %s, is_active = %s WHERE id = %s",
+            (username, role, is_active, admin_id),
+        )
+    else:
+        return execute_query(
+            "UPDATE admin_users SET username = %s, email = %s, role = %s, is_active = %s WHERE id = %s",
+            (username, email, role, is_active, admin_id),
+        )
 
 def delete_admin_user(admin_id: int):
     return execute_query("DELETE FROM admin_users WHERE id = %s", (admin_id,))
@@ -349,3 +362,23 @@ def log_admin_action(username: str, action: str, details: str = "", ip: str = ""
     except Exception as e:
         logging.error("Error logging admin action: %s", e)
         return False
+
+
+
+def get_admin_by_email(email: str) -> Optional[Dict[str, Any]]:
+    """
+    Returns admin row by email (case-insensitive) or None.
+    Requires an 'email' column in admin_users table.
+    """
+    try:
+        res = execute_query(
+            "SELECT id, username, email, role, is_active FROM admin_users "
+            "WHERE LOWER(email) = LOWER(%s) LIMIT 1",
+            (email,),
+            fetch=True,
+        )
+        return res[0] if res else None
+    except Exception as e:
+        logging.warning("get_admin_by_email error: %s", e)
+        return None
+

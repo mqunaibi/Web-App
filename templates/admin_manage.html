@@ -20,6 +20,7 @@
         <tr>
           <th>#</th>
           <th>Username</th>
+          <th>Email</th> <!-- NEW -->
           <th>Role</th>
           <th>Active</th>
           <th>Created At</th>
@@ -31,6 +32,7 @@
         <tr>
           <td>{{ a.id }}</td>
           <td>{{ a.username }}</td>
+          <td>{{ a.email or '' }}</td> <!-- NEW -->
           <td class="text-uppercase">{{ a.role }}</td>
           <td>
             {% if a.is_active %}<span class="badge bg-success">Active</span>
@@ -142,7 +144,6 @@ window.addEventListener('DOMContentLoaded', function () {
       });
 
       const ct = res.headers.get('content-type') || '';
-      // لو الاستجابة ليست JSON (تحويل/403/صفحة HTML) نعرض النص كما هو
       if (!ct.includes('application/json')) {
         const text = await res.text();
         throw new Error('Unexpected response (' + res.status + '). ' + text.slice(0, 200));
@@ -163,6 +164,5 @@ window.addEventListener('DOMContentLoaded', function () {
   });
 });
 </script>
-
 
 {% endblock %}

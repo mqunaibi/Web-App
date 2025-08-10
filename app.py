@@ -9,6 +9,9 @@ Main Flask application entrypoint.
 - Registers the newadmin blueprint (admin pages)
 - Preserves existing behaviors and routes
 """
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+import smtplib
+from email.mime.text import MIMEText
 
 import os
 import sys
@@ -45,12 +48,61 @@ from api_handler import (
     log_admin_action,
     # NEW: pending notify helpers
     get_users_pending_email_notifications,
-    mark_user_email_notified,
+    mark_user_email_notified,    get_admin_by_email,
 )
+
 from auth_utils import require_roles
 
 # ---- Load .env early ----
 load_dotenv()
+
+PASSWORD_RESET_SALT = os.getenv("PASSWORD_RESET_SALT", "pw-reset-salt")
+PASSWORD_RESET_EXP_SECONDS = int(os.getenv("PASSWORD_RESET_EXP_SECONDS", "3600"))  # 1 hour
+ADMIN_PANEL_URL = os.getenv("ADMIN_PANEL_URL", "").rstrip("/")
+
+def _get_serializer():
+    secret = os.getenv("SECRET_KEY", "change-me")
+    return URLSafeTimedSerializer(secret_key=secret, salt=PASSWORD_RESET_SALT)
+
+def _absolute_url(path: str) -> str:
+    # 
+    base = ADMIN_PANEL_URL or (request.url_root.rstrip("/"))
+    return f"{base}{path}"
+
+def _send_email(to_email: str, subject: str, html: str):
+    host = os.getenv("SMTP_HOST")
+    port = int(os.getenv("SMTP_PORT", "587"))
+    user = os.getenv("SMTP_USER")
+    pwd  = os.getenv("SMTP_PASSWORD")
+    use_tls = os.getenv("SMTP_USE_TLS", "1") == "1"
+    use_ssl = os.getenv("SMTP_USE_SSL", "0") == "1"
+    from_email = os.getenv("NOTIFY_FROM", user)
+
+    if not (host and port and user and pwd and from_email):
+        app.logger.error("SMTP is not configured properly.")
+        return False, "SMTP misconfiguration"
+
+    msg = MIMEText(html, "html", "utf-8")
+    msg["Subject"] = subject
+    msg["From"] = from_email
+    msg["To"] = to_email
+
+    try:
+        if use_ssl:
+            server = smtplib.SMTP_SSL(host, port)
+        else:
+            server = smtplib.SMTP(host, port)
+        server.ehlo()
+        if use_tls and not use_ssl:
+            server.starttls()
+        server.login(user, pwd)
+        server.sendmail(from_email, [to_email], msg.as_string())
+        server.quit()
+        return True, None
+    except Exception as e:
+        app.logger.exception("Send email failed: %s", e)
+        return False, str(e)
+
 
 # ---- Logging: file + console ----
 log_format = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d - %(message)s"
@@ -125,6 +177,99 @@ def login():
         else:
             error = err or "Login failed"
     return render_template("login.html", error=error)
+
+
+
+# ---------------- Forgot / Reset password (self-service by email) ----------------
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    message = None
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+        admin = None
+        try:
+            admin = get_admin_by_email(email)
+        except Exception as e:
+            app.logger.warning("get_admin_by_email error for %s: %s", email, e)
+
+        # Do not reveal whether email exists (privacy & security)
+        try:
+            if admin:
+                s = _get_serializer()
+                token = s.dumps({"admin_id": admin["id"], "email": email})
+                reset_link = url_for("reset_password", token=token, _external=True)
+                html = f"""
+                <p>You requested to reset your password.</p>
+                <p>To proceed, click the link below (valid for 1 hour):</p>
+                <p><a href="{reset_link}">{reset_link}</a></p>
+                <p>If you did not request this, you can safely ignore this email.</p>
+                """
+                ok, err = _send_email(email, "رابط استعادة كلمة المرور", html)
+                if not ok:
+                    app.logger.error("Password reset email failed for %s: %s", email, err)
+        except Exception as e:
+            app.logger.exception("forgot-password failed: %s", e)
+
+        message = "If the email is registered, a password reset link has been sent."
+        return render_template("forgot_password.html", message=message)
+
+    return render_template("forgot_password.html", message=message)
+
+
+@app.route("/reset-password", methods=["GET", "POST"])
+def reset_password():
+    error = None
+    message = None
+    show_form = True
+    token = request.values.get("token", "")
+
+    if request.method == "GET":
+        try:
+            s = _get_serializer()
+            s.loads(token, max_age=PASSWORD_RESET_EXP_SECONDS)  # validate only
+            return render_template("reset_password.html", token=token, show_form=True)
+        except SignatureExpired:
+            error = "The reset link has expired. Please request a new one."
+            show_form = False
+        except BadSignature:
+            error = "Invalid reset link."
+            show_form = False
+        return render_template("reset_password.html", error=error, show_form=show_form)
+
+    # POST — save new password
+    new_password = (request.form.get("new_password") or "").strip()
+    confirm = (request.form.get("confirm_password") or "").strip()
+    if len(new_password) < 8:
+        return render_template("reset_password.html", token=token, error="Minimum 8 characters.", show_form=True)
+    if new_password != confirm:
+        return render_template("reset_password.html", token=token, error="Passwords do not match.", show_form=True)
+
+    try:
+        s = _get_serializer()
+        data = s.loads(token, max_age=PASSWORD_RESET_EXP_SECONDS)
+        admin_id = data.get("admin_id")
+        if not admin_id:
+            raise BadSignature("missing id")
+
+        ok = update_admin_password(admin_id, new_password)
+        if ok is True:
+            message = "Your new password has been set successfully. You can log in now."
+            show_form = False
+        else:
+            error = f"{ok}"
+    except SignatureExpired:
+        error = "The reset link has expired. Please request a new one."
+        show_form = False
+    except BadSignature:
+        error = "Invalid reset link."
+        show_form = False
+    except Exception as e:
+        app.logger.exception("reset-password failed: %s", e)
+        error = "An unexpected error occurred."
+
+    return render_template("reset_password.html", token=token, message=message, error=error, show_form=show_form)
+
+
 
 @app.route("/logout")
 def logout():

@@ -1,52 +1,57 @@
-{% extends 'layout.html' %}
-{% set page_title = "Add Admin" %}
+{% extends "layout.html" %}
 {% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex align-items-center justify-content-between mb-3">
+    <h1 class="h4 mb-0">WE APP - Add Admin</h1>
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin_manage') }}">
+      Back
+    </a>
+  </div>
 
-<div class="container py-4">
-  
-  <form method="POST" action="{{ url_for('newadmin.admin_add') }}" class="row g-3" autocomplete="off">
-    <div class="col-12">
-      <label for="admin-username" class="form-label visually-hidden">Username</label>
-      <input id="admin-username" type="text" name="username" class="form-control" placeholder="username" required autocomplete="off">
+  {% if error %}<div class="alert alert-danger">{{ error }}</div>{% endif %}
+  {% if message %}<div class="alert alert-success">{{ message }}</div>{% endif %}
+
+  <form method="post" autocomplete="off" class="card p-3">
+    <!-- Username -->
+    <div class="mb-3">
+      <label for="username" class="form-label">username</label>
+      <input type="text" class="form-control" id="username" name="username" placeholder="username" required>
     </div>
 
-    <div class="col-12">
-      <label for="admin-password" class="form-label visually-hidden">Password</label>
-      <input id="admin-password" type="password" name="password" class="form-control" placeholder="********" required autocomplete="new-password">
+    <!-- Email (NEW) -->
+    <div class="mb-3">
+      <label for="email" class="form-label">Email address</label>
+      <input type="email" class="form-control" id="email" name="email" placeholder="name@example.com" required>
     </div>
 
-    <div class="col-12">
-      <label for="admin-role" class="form-label visually-hidden">Role</label>
-      <select id="admin-role" name="role" class="form-select" required>
+    <!-- Password -->
+    <div class="mb-3">
+      <label for="password" class="form-label">password</label>
+      <input type="password" class="form-control" id="password" name="password" placeholder="********" required minlength="8">
+      <div class="form-text">Minimum 8 characters.</div>
+    </div>
+
+    <!-- Role -->
+    <div class="mb-3">
+      <label for="role" class="form-label">Role</label>
+      <select class="form-select" id="role" name="role" required>
         <option value="" selected disabled>Select role...</option>
-        <option value="super">Super Admin</option>
-        <option value="limited">Limited Admin</option>
-        <option value="viewer">Viewer Admin</option>
+        <option value="admin">Admin</option>
+        <option value="manager">Manager</option>
+        <option value="viewer">Viewer</option>
       </select>
     </div>
 
-    <div class="col-12">
-      <div class="form-check form-switch">
-        <input class="form-check-input" type="checkbox" id="is_active" name="is_active" aria-label="Active status">
-        <label class="form-check-label" for="is_active">Active</label>
-      </div>
+    <!-- Active -->
+    <div class="form-check form-switch mb-3">
+      <input class="form-check-input" type="checkbox" id="is_active" name="is_active" value="1">
+      <label class="form-check-label" for="is_active">Active</label>
     </div>
 
-    <div class="col-12 d-flex gap-2">
+    <div class="d-flex gap-2">
       <button type="submit" class="btn btn-success">Add Admin</button>
       <a href="{{ url_for('admin_manage') }}" class="btn btn-secondary">Cancel</a>
     </div>
   </form>
 </div>
-
-<style>
-.visually-hidden {
-  position: absolute !important;
-  height: 1px; width: 1px;
-  overflow: hidden;
-  clip: rect(1px, 1px, 1px, 1px);
-  white-space: nowrap;
-}
-</style>
-
 {% endblock %}
