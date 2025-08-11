@@ -204,7 +204,7 @@ def forgot_password():
                 <p><a href="{reset_link}">{reset_link}</a></p>
                 <p>If you did not request this, you can safely ignore this email.</p>
                 """
-                ok, err = _send_email(email, "رابط استعادة كلمة المرور", html)
+                ok, err = _send_email(email, "Password reset link", html)
                 if not ok:
                     app.logger.error("Password reset email failed for %s: %s", email, err)
         except Exception as e:
@@ -324,20 +324,24 @@ def admin_edit(admin_id):
 
     if request.method == "POST":
         username = request.form.get("username") or admin["username"]
+        email = (request.form.get("email") or admin.get("email") or "").strip()  # NEW
         role = (request.form.get("role") or admin["role"]).strip().lower()
-        is_active = 1 if request.form.get("is_active") == "on" else 0
+        raw_active = request.form.get("is_active")
+        is_active = 1 if str(raw_active).strip().lower() in ("on", "1", "true", "yes") else 0
+
         new_password = (request.form.get("new_password") or "").strip()
 
         app.logger.info(
-            "Admin edit requested by super=%s for admin_id=%s (username=%s, role=%s, active=%s)",
+            "Admin edit requested by super=%s for admin_id=%s (username=%s, email=%s, role=%s, active=%s)",
             session.get("admin_user"),
             admin_id,
             username,
+            email,
             role,
             is_active,
         )
 
-        result = update_admin_user(admin_id, username, role, is_active)
+        result = update_admin_user(admin_id, username, role, is_active, email)  # UPDATED
         if result is not True:
             app.logger.error(
                 "Admin edit failed for id=%s by super=%s: %s",
@@ -353,7 +357,7 @@ def admin_edit(admin_id):
             log_admin_action(
                 session.get("admin_user"),
                 "edit_admin",
-                f"Edited admin id={admin_id} (username={username}, role={role}, active={is_active})",
+                f"Edited admin id={admin_id} (username={username}, email={email}, role={role}, active={is_active})",
                 get_client_ip(),
             )
         except Exception as e:
@@ -489,7 +493,7 @@ def admin_change_password():
     if request.method == "POST":
         current = request.form.get("current_password", "")
         new = request.form.get("new_password", "")
-        confirm = request.form.get("confirm_password", "")
+        confirm = (request.form.get("confirm_password") or "").strip()
 
         if len(new) < 8:
             err = "New password must be at least 8 characters."

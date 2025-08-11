@@ -152,23 +152,38 @@ def newdelete_user(email: str):
 @roles_required("super")
 def admin_add():
     if request.method == "POST":
-        username = request.form.get("username", "").strip()
+        username = (request.form.get("username") or "").strip()
+        email = (request.form.get("email") or "").strip().lower()  # NEW: read email from form
         password = request.form.get("password", "")
         role = (request.form.get("role", "viewer") or "viewer").strip().lower()
-        is_active = 1 if request.form.get("is_active") == "on" else 0
+        # Be tolerant to both "on" and "1"
+        is_active = 1 if (request.form.get("is_active") in ("on", "1", "true", "True")) else 0
 
-        result = add_admin_user(username, password, role, is_active)
+        # Optional: minimal sanity checks (do not block UI if you prefer DB-level validation)
+        if not username:
+            flash("Username is required.", "danger")
+            return render_template("admin_add.html")
+        if len(password) < 8:
+            flash("Password must be at least 8 characters.", "danger")
+            return render_template("admin_add.html")
+
+        # Pass email to DB layer (api_handler.add_admin_user accepts email param)
+        result = add_admin_user(username, password, role, is_active, email)
+
         if result is True:
             logging.info(
-                "Admin added: %s by super=%s",
+                "Admin added: %s by super=%s (email=%s, role=%s, active=%s)",
                 username,
                 session.get("admin_user", "unknown"),
+                email,
+                role,
+                is_active,
             )
             try:
                 log_admin_action(
                     session.get("admin_user"),
                     "add_admin",
-                    f"Added admin username={username}, role={role}, active={is_active}",
+                    f"Added admin username={username}, email={email}, role={role}, active={is_active}",
                     request.remote_addr,
                 )
             except Exception as e:

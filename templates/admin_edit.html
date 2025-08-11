@@ -18,7 +18,7 @@
       <input type="text" class="form-control" id="username" name="username" value="{{ admin.username }}" required>
     </div>
 
-    <!-- Email (NEW) -->
+    <!-- Email -->
     <div class="mb-3">
       <label for="email" class="form-label">Email address</label>
       <input type="email" class="form-control" id="email" name="email" value="{{ admin.email or '' }}" placeholder="name@example.com" required>
@@ -35,9 +35,9 @@
     <div class="mb-3">
       <label for="role" class="form-label">Role</label>
       <select class="form-select" id="role" name="role" required>
-        <option value="admin"   {% if admin.role == 'admin' %}selected{% endif %}>Admin</option>
-        <option value="manager" {% if admin.role == 'manager' %}selected{% endif %}>Manager</option>
-        <option value="viewer"  {% if admin.role == 'viewer' %}selected{% endif %}>Viewer</option>
+        <option value="super"   {% if admin.role == 'super' %}selected{% endif %}>super</option>
+        <option value="limited" {% if admin.role == 'limited' %}selected{% endif %}>limited</option>
+        <option value="viewer"  {% if admin.role == 'viewer' %}selected{% endif %}>viewer</option>
       </select>
     </div>
 
