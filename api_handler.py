@@ -117,13 +117,14 @@ def _is_all_company(name: Optional[str]) -> bool:
 def get_pending_users(company_name: str = None):
     if company_name and not _is_all_company(company_name):
         return execute_query(
-            "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid "
+            # ADDED company_name AS company
+            "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid, company_name AS company "
             "FROM users WHERE approved = 0 AND company_name = %s",
             (company_name,),
             fetch=True,
         )
     return execute_query(
-        "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid "
+        "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid, company_name AS company "
         "FROM users WHERE approved = 0",
         fetch=True,
     )
@@ -131,13 +132,13 @@ def get_pending_users(company_name: str = None):
 def get_approved_users(company_name: str = None):
     if company_name and not _is_all_company(company_name):
         return execute_query(
-            "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid "
+            "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid, company_name AS company "
             "FROM users WHERE approved = 1 AND company_name = %s",
             (company_name,),
             fetch=True,
         )
     return execute_query(
-        "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid "
+        "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid, company_name AS company "
         "FROM users WHERE approved = 1",
         fetch=True,
     )
@@ -145,13 +146,13 @@ def get_approved_users(company_name: str = None):
 def get_rejected_users(company_name: str = None):
     if company_name and not _is_all_company(company_name):
         return execute_query(
-            "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid "
+            "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid, company_name AS company "
             "FROM users WHERE approved = -1 AND company_name = %s",
             (company_name,),
             fetch=True,
         )
     return execute_query(
-        "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid "
+        "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid, company_name AS company "
         "FROM users WHERE approved = -1",
         fetch=True,
     )
@@ -202,7 +203,8 @@ def get_users_pending_email_notifications(limit: int = 50):
     """
     _ensure_notify_columns()
     return execute_query(
-        "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid "
+        # include company for potential email templates/filters
+        "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid, company_name AS company "
         "FROM users "
         "WHERE approved = 0 AND (notify_email_sent = 0 OR notify_email_sent IS NULL) "
         "ORDER BY created_at ASC LIMIT %s",

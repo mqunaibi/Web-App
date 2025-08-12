@@ -164,7 +164,7 @@
 
   function infoButton(u, status) {
     return '<button type="button" class="btn btn-sm btn-primary btn-icon info-btn" title="More info" ' +
-           'data-email="'+esc(u.email)+'" data-phone="'+esc(u.phone || "—")+'" data-company="'+esc(u.company_name || "—")+'" ' +
+           'data-email="'+esc(u.email)+'" data-phone="'+esc(u.phone || "—")+'" data-company="'+esc(u.company || "—")+'" ' +
            'data-device_name="'+esc(u.device_name || "—")+'" data-device_uuid="'+esc(u.device_uuid || "—")+'" ' +
            'data-registered="'+esc(u.registered_at || u.created_at || "—")+'" data-status="'+esc(status)+'">' +
            '<i class="fas fa-info"></i></button>';

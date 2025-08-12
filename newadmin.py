@@ -228,6 +228,10 @@ def admin_add():
 # Utils
 # ------------------------------
 def format_users(users):
+    """
+    Normalize rows coming from DB (api_handler). The DB column is `company_name`,
+    and we expose it to the front-end as `company`.
+    """
     return [
         {
             "email": u.get("email"),
@@ -237,6 +241,8 @@ def format_users(users):
             "ip_address": u.get("ip_address", "N/A"),
             "registered_at": u.get("created_at", "N/A"),
             "device_uuid": u.get("device_uuid", "N/A"),
+            # NEW: expose company name
+            "company": (u.get("company") or u.get("company_name") or "—"),
         }
         for u in users
     ]
