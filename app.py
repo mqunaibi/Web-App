@@ -166,6 +166,9 @@ def login():
             session["admin_user"] = admin["username"]
             session["admin_role"] = (admin["role"] or "").strip().lower()
             session["admin_id"] = admin["id"]
+            # NEW: store company in session (used later for filtering)
+            session["admin_company"] = (admin.get("company_name") or "").strip()
+
             # DB log (best-effort)
             try:
                 log_admin_action(
@@ -324,7 +327,10 @@ def admin_edit(admin_id):
 
     if request.method == "POST":
         username = request.form.get("username") or admin["username"]
-        email = (request.form.get("email") or admin.get("email") or "").strip()  # NEW
+        email = (request.form.get("email") or admin.get("email") or "").strip()
+        # NEW: company_name from form (fallback to current value)
+        company_name = (request.form.get("company_name") or admin.get("company_name") or "").strip()
+
         role = (request.form.get("role") or admin["role"]).strip().lower()
         raw_active = request.form.get("is_active")
         is_active = 1 if str(raw_active).strip().lower() in ("on", "1", "true", "yes") else 0
@@ -332,16 +338,18 @@ def admin_edit(admin_id):
         new_password = (request.form.get("new_password") or "").strip()
 
         app.logger.info(
-            "Admin edit requested by super=%s for admin_id=%s (username=%s, email=%s, role=%s, active=%s)",
+            "Admin edit requested by super=%s for admin_id=%s (username=%s, email=%s, company=%s, role=%s, active=%s)",
             session.get("admin_user"),
             admin_id,
             username,
             email,
+            company_name,
             role,
             is_active,
         )
 
-        result = update_admin_user(admin_id, username, role, is_active, email)  # UPDATED
+        # UPDATED: pass company_name to api_handler.update_admin_user
+        result = update_admin_user(admin_id, username, role, is_active, email, company_name)
         if result is not True:
             app.logger.error(
                 "Admin edit failed for id=%s by super=%s: %s",
@@ -350,6 +358,14 @@ def admin_edit(admin_id):
                 result,
             )
             flash(f"Error: {result}", "danger")
+            # Re-render with latest form values
+            admin.update({
+                "username": username,
+                "email": email,
+                "company_name": company_name,
+                "role": role,
+                "is_active": is_active,
+            })
             return render_template("admin_edit.html", admin=admin)
 
         # DB log: edit admin
@@ -357,7 +373,7 @@ def admin_edit(admin_id):
             log_admin_action(
                 session.get("admin_user"),
                 "edit_admin",
-                f"Edited admin id={admin_id} (username={username}, email={email}, role={role}, active={is_active})",
+                f"Edited admin id={admin_id} (username={username}, email={email}, company={company_name}, role={role}, active={is_active})",
                 get_client_ip(),
             )
         except Exception as e:
@@ -373,6 +389,13 @@ def admin_edit(admin_id):
                     pw_res,
                 )
                 flash(f"Error updating password: {pw_res}", "danger")
+                admin.update({
+                    "username": username,
+                    "email": email,
+                    "company_name": company_name,
+                    "role": role,
+                    "is_active": is_active,
+                })
                 return render_template("admin_edit.html", admin=admin)
             else:
                 app.logger.info(

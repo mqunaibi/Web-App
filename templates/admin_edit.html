@@ -24,6 +24,13 @@
       <input type="email" class="form-control" id="email" name="email" value="{{ admin.email or '' }}" placeholder="name@example.com" required>
     </div>
 
+    <!-- Company -->
+    <div class="mb-3">
+      <label for="company_name" class="form-label">Company</label>
+      <input type="text" class="form-control" id="company_name" name="company_name" value="{{ admin.company_name or '' }}" placeholder="e.g., Best Performance Ltd">
+      <div class="form-text">Set the company this admin belongs to.</div>
+    </div>
+
     <!-- Optional: change password (leave blank to keep) -->
     <div class="mb-3">
       <label for="new_password" class="form-label">New password (optional)</label>

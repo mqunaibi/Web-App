@@ -15,19 +15,30 @@
     <!-- Username -->
     <div class="mb-3">
       <label for="username" class="form-label">username</label>
-      <input type="text" class="form-control" id="username" name="username" placeholder="username" required>
+      <input type="text" class="form-control" id="username" name="username"
+             placeholder="username" value="" required autocomplete="off">
     </div>
 
     <!-- Email -->
     <div class="mb-3">
       <label for="email" class="form-label">Email address</label>
-      <input type="email" class="form-control" id="email" name="email" placeholder="name@example.com" required>
+      <input type="email" class="form-control" id="email" name="email"
+             placeholder="name@example.com" value="" required autocomplete="off">
+    </div>
+
+    <!-- Company -->
+    <div class="mb-3">
+      <label for="company_name" class="form-label">Company</label>
+      <input type="text" class="form-control" id="company_name" name="company_name"
+             placeholder="e.g., Best Performance Ltd" value="" autocomplete="off">
+      <div class="form-text">Set the company this admin belongs to.</div>
     </div>
 
     <!-- Password -->
     <div class="mb-3">
       <label for="password" class="form-label">password</label>
-      <input type="password" class="form-control" id="password" name="password" placeholder="********" required minlength="8">
+      <input type="password" class="form-control" id="password" name="password"
+             placeholder="********" value="" required minlength="8" autocomplete="new-password">
       <div class="form-text">Minimum 8 characters.</div>
     </div>
 

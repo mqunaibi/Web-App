@@ -106,23 +106,50 @@ def execute_query(
     return result
 
 # =========================
+# Helper: treat "All" as no filter
+# =========================
+def _is_all_company(name: Optional[str]) -> bool:
+    return bool(name) and name.strip().lower() == "all"
+
+# =========================
 # Users (pending / approved / rejected)
 # =========================
-def get_pending_users():
+def get_pending_users(company_name: str = None):
+    if company_name and not _is_all_company(company_name):
+        return execute_query(
+            "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid "
+            "FROM users WHERE approved = 0 AND company_name = %s",
+            (company_name,),
+            fetch=True,
+        )
     return execute_query(
         "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid "
         "FROM users WHERE approved = 0",
         fetch=True,
     )
 
-def get_approved_users():
+def get_approved_users(company_name: str = None):
+    if company_name and not _is_all_company(company_name):
+        return execute_query(
+            "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid "
+            "FROM users WHERE approved = 1 AND company_name = %s",
+            (company_name,),
+            fetch=True,
+        )
     return execute_query(
         "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid "
         "FROM users WHERE approved = 1",
         fetch=True,
     )
 
-def get_rejected_users():
+def get_rejected_users(company_name: str = None):
+    if company_name and not _is_all_company(company_name):
+        return execute_query(
+            "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid "
+            "FROM users WHERE approved = -1 AND company_name = %s",
+            (company_name,),
+            fetch=True,
+        )
     return execute_query(
         "SELECT email, phone, device_name, device_type, ip_address, created_at, device_uuid "
         "FROM users WHERE approved = -1",
@@ -195,7 +222,7 @@ def mark_user_email_notified(email: str):
 # =========================
 def get_admin_by_id(admin_id: int) -> Optional[Dict[str, Any]]:
     res = execute_query(
-        "SELECT id, username, role, is_active, email FROM admin_users WHERE id = %s",
+        "SELECT id, username, role, is_active, email, company_name FROM admin_users WHERE id = %s",
         (admin_id,),
         fetch=True,
     )
@@ -203,7 +230,8 @@ def get_admin_by_id(admin_id: int) -> Optional[Dict[str, Any]]:
 
 def get_admin_by_username(username: str) -> Optional[Dict[str, Any]]:
     res = execute_query(
-        "SELECT id, username, password, role, is_active FROM admin_users WHERE username = %s",
+        "SELECT id, username, password, role, is_active, email, company_name "
+        "FROM admin_users WHERE username = %s",
         (username,),
         fetch=True,
     )
@@ -211,36 +239,75 @@ def get_admin_by_username(username: str) -> Optional[Dict[str, Any]]:
 
 def get_all_admins():
     return execute_query(
-        "SELECT id, username, role, is_active, email, created_at FROM admin_users ORDER BY id",
+        "SELECT id, username, role, is_active, email, company_name, created_at "
+        "FROM admin_users ORDER BY id",
         fetch=True,
     )
 
-def add_admin_user(username: str, password: str, role: str, is_active: int, email: str | None = None):
+def add_admin_user(
+    username: str,
+    password: str,
+    role: str,
+    is_active: int,
+    email: str | None = None,
+    company_name: str | None = None,
+):
     """Always store with the modern hashing method (HASH_METHOD)."""
     hashed = generate_password_hash(password, method=HASH_METHOD)
-    if email is None:
+    # 4 حالات لتبسيط الإدراج حسب القيم المتاحة
+    if email is None and company_name is None:
         return execute_query(
             "INSERT INTO admin_users (username, password, role, is_active, created_at) "
             "VALUES (%s, %s, %s, %s, NOW())",
             (username, hashed, role, is_active),
         )
-    else:
+    elif company_name is None:
         return execute_query(
             "INSERT INTO admin_users (username, email, password, role, is_active, created_at) "
             "VALUES (%s, %s, %s, %s, %s, NOW())",
             (username, email, hashed, role, is_active),
         )
+    elif email is None:
+        return execute_query(
+            "INSERT INTO admin_users (username, company_name, password, role, is_active, created_at) "
+            "VALUES (%s, %s, %s, %s, %s, NOW())",
+            (username, company_name, hashed, role, is_active),
+        )
+    else:
+        return execute_query(
+            "INSERT INTO admin_users (username, email, company_name, password, role, is_active, created_at) "
+            "VALUES (%s, %s, %s, %s, %s, %s, NOW())",
+            (username, email, company_name, hashed, role, is_active),
+        )
 
-def update_admin_user(admin_id: int, username: str, role: str, is_active: int, email: str | None = None):
-    if email is None:
+def update_admin_user(
+    admin_id: int,
+    username: str,
+    role: str,
+    is_active: int,
+    email: str | None = None,
+    company_name: str | None = None,
+):
+    # 4 حالات للتحديث حسب الحقول المرسلة
+    if email is None and company_name is None:
         return execute_query(
             "UPDATE admin_users SET username = %s, role = %s, is_active = %s WHERE id = %s",
             (username, role, is_active, admin_id),
         )
-    else:
+    elif company_name is None:
         return execute_query(
             "UPDATE admin_users SET username = %s, email = %s, role = %s, is_active = %s WHERE id = %s",
             (username, email, role, is_active, admin_id),
+        )
+    elif email is None:
+        return execute_query(
+            "UPDATE admin_users SET username = %s, company_name = %s, role = %s, is_active = %s WHERE id = %s",
+            (username, company_name, role, is_active, admin_id),
+        )
+    else:
+        return execute_query(
+            "UPDATE admin_users SET username = %s, email = %s, company_name = %s, role = %s, is_active = %s WHERE id = %s",
+            (username, email, company_name, role, is_active, admin_id),
         )
 
 def delete_admin_user(admin_id: int):
@@ -364,7 +431,6 @@ def log_admin_action(username: str, action: str, details: str = "", ip: str = ""
         return False
 
 
-
 def get_admin_by_email(email: str) -> Optional[Dict[str, Any]]:
     """
     Returns admin row by email (case-insensitive) or None.
@@ -372,7 +438,7 @@ def get_admin_by_email(email: str) -> Optional[Dict[str, Any]]:
     """
     try:
         res = execute_query(
-            "SELECT id, username, email, role, is_active FROM admin_users "
+            "SELECT id, username, email, role, is_active, company_name FROM admin_users "
             "WHERE LOWER(email) = LOWER(%s) LIMIT 1",
             (email,),
             fetch=True,
@@ -381,4 +447,3 @@ def get_admin_by_email(email: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         logging.warning("get_admin_by_email error: %s", e)
         return None
-

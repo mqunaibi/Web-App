@@ -34,10 +34,29 @@ def _enforce_login_and_context():
     if not session.get("admin_logged_in"):
         return redirect(url_for("login"))
     g.admin_role = normalize_role(session.get("admin_role"))
+    g.admin_company = (session.get("admin_company") or "").strip()
 
 @newadmin_bp.app_context_processor
 def inject_role():
-    return {"admin_role": normalize_role(session.get("admin_role"))}
+    return {
+        "admin_role": normalize_role(session.get("admin_role")),
+        "admin_company": (session.get("admin_company") or "").strip(),
+    }
+
+def _company_filter():
+    """
+    Return None to disable filtering (see all) when:
+      - role is super, OR
+      - admin_company equals 'All' (case-insensitive).
+    Otherwise return the admin's company.
+    """
+    role = normalize_role(session.get("admin_role"))
+    if role == "super":
+        return None
+    name = (session.get("admin_company") or "").strip()
+    if name.lower() == "all":
+        return None
+    return name or None
 
 # ------------------------------
 # Dashboard (landing)
@@ -52,9 +71,10 @@ def admin_dashboard():
 @newadmin_bp.route("/newadmin")
 @roles_required("super", "limited", "viewer")
 def newadmin_page():
-    pending_users = get_pending_users() or []
-    approved_users = get_approved_users() or []
-    rejected_users = get_rejected_users() or []
+    company_name = _company_filter()
+    pending_users = get_pending_users(company_name) or []
+    approved_users = get_approved_users(company_name) or []
+    rejected_users = get_rejected_users(company_name) or []
     return render_template(
         "newadmin.html",
         pending_count=len(pending_users),
@@ -68,11 +88,12 @@ def newadmin_page():
 @newadmin_bp.route("/newadmin_data")
 @roles_required("super", "limited", "viewer")
 def admin_data():
+    company_name = _company_filter()
     return jsonify(
         {
-            "pending_users": format_users(get_pending_users() or []),
-            "approved_users": format_users(get_approved_users() or []),
-            "rejected_users": format_users(get_rejected_users() or []),
+            "pending_users": format_users(get_pending_users(company_name) or []),
+            "approved_users": format_users(get_approved_users(company_name) or []),
+            "rejected_users": format_users(get_rejected_users(company_name) or []),
         }
     )
 
@@ -153,13 +174,13 @@ def newdelete_user(email: str):
 def admin_add():
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
-        email = (request.form.get("email") or "").strip().lower()  # NEW: read email from form
+        email = (request.form.get("email") or "").strip().lower()
+        company_name = (request.form.get("company_name") or "").strip()
         password = request.form.get("password", "")
         role = (request.form.get("role", "viewer") or "viewer").strip().lower()
-        # Be tolerant to both "on" and "1"
         is_active = 1 if (request.form.get("is_active") in ("on", "1", "true", "True")) else 0
 
-        # Optional: minimal sanity checks (do not block UI if you prefer DB-level validation)
+        # Minimal checks
         if not username:
             flash("Username is required.", "danger")
             return render_template("admin_add.html")
@@ -167,15 +188,16 @@ def admin_add():
             flash("Password must be at least 8 characters.", "danger")
             return render_template("admin_add.html")
 
-        # Pass email to DB layer (api_handler.add_admin_user accepts email param)
-        result = add_admin_user(username, password, role, is_active, email)
+        # Pass company_name to DB layer
+        result = add_admin_user(username, password, role, is_active, email, company_name)
 
         if result is True:
             logging.info(
-                "Admin added: %s by super=%s (email=%s, role=%s, active=%s)",
+                "Admin added: %s by super=%s (email=%s, company=%s, role=%s, active=%s)",
                 username,
                 session.get("admin_user", "unknown"),
                 email,
+                company_name,
                 role,
                 is_active,
             )
@@ -183,14 +205,13 @@ def admin_add():
                 log_admin_action(
                     session.get("admin_user"),
                     "add_admin",
-                    f"Added admin username={username}, email={email}, role={role}, active={is_active}",
+                    f"Added admin username={username}, email={email}, company={company_name}, role={role}, active={is_active}",
                     request.remote_addr,
                 )
             except Exception as e:
                 logging.warning("DB log (add_admin) failed: %s", e)
 
             flash("Admin added successfully!", "success")
-            # Keep target endpoint name as in your project
             return redirect(url_for("admin_manage"))
         else:
             logging.error(
