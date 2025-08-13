@@ -6,6 +6,8 @@
 <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/table_columns.css') }}">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<!-- SweetAlert2 CSS -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 
 <style>
   table.dataTable thead th { color:#000; }
@@ -15,39 +17,56 @@
   #toolbar { box-shadow: 0 1px 2px rgba(0,0,0,.05); }
   #toolbar .btn { line-height: 1; }
   #toolbar .toolbar-row{
-    display:flex; flex-wrap:wrap;
-    align-items:center; justify-content:space-between;
-    gap:.5rem; min-height:56px; /* توسيط رأسي جميل بين الحدين */
+    display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between;
+    gap:.5rem; min-height:56px;
   }
-  /* مكان "Show entries" */
   #toolbar .length-slot label{
-    display:flex; align-items:center; gap:.4rem; margin:0;
-    white-space:nowrap;
+    display:flex; align-items:center; gap:.4rem; margin:0; white-space:nowrap;
   }
 
-  @media (max-width: 576px) {
-    #globalSearch { width: 140px !important; }
-  }
+  @media (max-width: 576px) { #globalSearch { width: 140px !important; } }
 
   .badge-pill { border-radius: 999px; }
   .status-btns .btn { min-width: 120px; }
-  /* أخفِ أزرار DataTables الداخلية لتفادي التكرار */
   .dt-buttons { display: none !important; }
   @media print { #toolbar, .status-btns { display: none !important; } table { font-size: 12px; } }
 
-  /* أزرار دائرية صغيرة في عمود Action */
-  .btn-icon {
-    border-radius: 50%;
-    width: 28px; height: 28px;
-    display: inline-flex; align-items: center; justify-content: center;
-    padding: 0; transition: background-color .2s ease, transform .15s ease;
+  /* ===== Action column ===== */
+  .btn-icon{
+    border-radius:50%; width:28px; height:28px;
+    display:inline-flex; align-items:center; justify-content:center;
+    padding:0; transition:background-color .2s, transform .15s;
   }
-  .btn-icon i { font-size: 12px; line-height: 1; }
-  .btn-icon:hover { transform: scale(1.1); background-color: rgba(0,0,0,0.05); }
-  #usersTable td .btn-icon { margin-inline-end: .25rem; }
+  .btn-icon i{ font-size:12px; line-height:1; }
+  .btn-icon:hover{ transform:scale(1.1); background-color:rgba(0,0,0,.05); }
+  #usersTable td .btn-icon{ margin:0 !important; } /* reset any margins */
 
-  /* ضبط المسافات داخل المودال */
-  #deviceInfoModal .lh-lg > div { margin-bottom: .25rem; }
+  #usersTable th.actions-cell, #usersTable td.actions-cell{
+    white-space:nowrap; width:1%;
+  }
+
+  /* container for row action buttons */
+  .actions-wrap{
+    display:inline-flex; align-items:center; flex-wrap:nowrap;
+    gap:.6rem;                    /* ← spacing between buttons */
+  }
+  /* Fallback for browsers without flex-gap support */
+  @supports not (gap: .6rem){
+    .actions-wrap > .btn-icon{ margin-right:.6rem; }
+    .actions-wrap > .btn-icon:last-child{ margin-right:0; }
+  }
+
+  /* Keep borders on last column */
+  #usersTable th:last-child, #usersTable td:last-child{
+    border-left:1px solid #dee2e6; border-right:1px solid #dee2e6;
+  }
+  #usersTable td, #usersTable th{ vertical-align:middle; }
+
+  /* Modal spacing */
+  #deviceInfoModal .lh-lg > div{ margin-bottom:.25rem; }
+
+  /* Extra spacing between SweetAlert2 dialog buttons */
+  .swal2-actions{ gap:.75rem !important; }
 </style>
 
 <div class="container py-3">
@@ -55,39 +74,41 @@
   <!-- Toolbar -->
   <div id="toolbar" class="bg-white py-2 mb-3 border rounded px-3">
     <div class="toolbar-row">
-
-      <!-- يسار: Show entries يُحقن هنا -->
       <div class="length-slot"></div>
 
-      <!-- يمين: أزرار التصدير + تحديث + البحث -->
       <div class="d-flex align-items-center gap-2 flex-wrap">
-        <button id="btnExcel" class="btn btn-success btn-sm" title="Export to Excel"><i class="fas fa-file-excel"></i></button>
-        <button id="btnPDF"   class="btn btn-danger btn-sm"  title="Export to PDF"><i class="fas fa-file-pdf"></i></button>
-        <button id="btnPrint" class="btn btn-secondary btn-sm" title="Print"><i class="fas fa-print"></i></button>
+        <button id="btnExcel" type="button" class="btn btn-success btn-sm" title="Export to Excel" aria-label="Export to Excel">
+          <i class="fas fa-file-excel" aria-hidden="true"></i>
+        </button>
+        <button id="btnPDF" type="button" class="btn btn-danger btn-sm" title="Export to PDF" aria-label="Export to PDF">
+          <i class="fas fa-file-pdf" aria-hidden="true"></i>
+        </button>
+        <button id="btnPrint" type="button" class="btn btn-secondary btn-sm" title="Print" aria-label="Print">
+          <i class="fas fa-print" aria-hidden="true"></i>
+        </button>
 
-        <button id="refresh-btn" type="button" class="btn btn-light btn-sm" title="Refresh">
-          <i class="fas fa-sync-alt"></i>
+        <button id="refresh-btn" type="button" class="btn btn-light btn-sm" title="Refresh" aria-label="Refresh">
+          <i class="fas fa-sync-alt" aria-hidden="true"></i>
         </button>
 
         <div class="d-flex align-items-center ms-1">
           <label for="globalSearch" class="me-2 mb-0">Search:</label>
-          <input id="globalSearch" type="search" class="form-control form-control-sm" style="width: 200px;">
+          <input id="globalSearch" name="globalSearch" type="search" class="form-control form-control-sm" style="width: 200px;">
         </div>
         <span id="notification" class="small text-muted ms-2"></span>
       </div>
-
     </div>
   </div>
 
   <!-- Status Switcher -->
   <div class="status-btns d-flex flex-wrap align-items-center gap-2 mb-3">
-    <button class="btn btn-outline-primary active" data-status="pending"  id="btnPending">
+    <button class="btn btn-outline-primary active" data-status="pending" id="btnPending" type="button">
       Pending <span class="badge text-bg-danger badge-pill" id="countPending">0</span>
     </button>
-    <button class="btn btn-outline-success" data-status="approved" id="btnApproved">
+    <button class="btn btn-outline-success" data-status="approved" id="btnApproved" type="button">
       Approved <span class="badge text-bg-success badge-pill" id="countApproved">0</span>
     </button>
-    <button class="btn btn-outline-secondary" data-status="rejected" id="btnRejected">
+    <button class="btn btn-outline-secondary" data-status="rejected" id="btnRejected" type="button">
       Rejected <span class="badge text-bg-secondary badge-pill" id="countRejected">0</span>
     </button>
   </div>
@@ -99,8 +120,9 @@
         <tr>
           <th>Email</th>
           <th>Phone</th>
+          <th class="d-none d-lg-table-cell">Company</th>
           <th class="d-none d-md-table-cell">Device UUID</th>
-          <th>Action</th>
+          <th class="actions-cell">Action</th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -131,204 +153,43 @@
   </div>
 </div>
 
-<!-- Scripts -->
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+<!-- Scripts (local first) -->
+<script src="{{ url_for('static', filename='js/jquery-3.6.0.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
+<script src="{{ url_for('static', filename='js/jquery.dataTables.min.js') }}"></script>
+
+<!-- DataTables + Buttons (CDN) -->
 <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
+
+<!-- Export deps -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
 
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<!-- Patch: force Cancel button on all non-toast Swal.fire dialogs -->
 <script>
-  const CAN_EDIT = ["super","limited"].includes(("{{ admin_role }}").trim().toLowerCase());
-  let payload = { pending_users: [], approved_users: [], rejected_users: [] };
-  let currentStatus = 'pending';
-  let dt = null;
-
-  function badge(s) {
-    const map = { pending: 'secondary', approved: 'success', rejected: 'danger' };
-    return '<span class="badge text-bg-' + (map[s] || 'secondary') + ' text-uppercase">' + s + '</span>';
+  if (window.Swal && typeof Swal.fire === 'function') {
+    const _orig = Swal.fire.bind(Swal);
+    Swal.fire = function(opts){
+      if (opts && opts.toast) return _orig(opts); // don't touch toasts
+      return _orig(Object.assign({ showCancelButton: true, cancelButtonText: 'Cancel' }, opts || {}));
+    };
   }
-
-  function esc(s){
-    return String(s ?? '')
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
-      .replace(/'/g,'&#39;');
-  }
-
-  function infoButton(u, status) {
-    return '<button type="button" class="btn btn-sm btn-primary btn-icon info-btn" title="More info" ' +
-           'data-email="'+esc(u.email)+'" data-phone="'+esc(u.phone || "—")+'" data-company="'+esc(u.company || "—")+'" ' +
-           'data-device_name="'+esc(u.device_name || "—")+'" data-device_uuid="'+esc(u.device_uuid || "—")+'" ' +
-           'data-registered="'+esc(u.registered_at || u.created_at || "—")+'" data-status="'+esc(status)+'">' +
-           '<i class="fas fa-info"></i></button>';
-  }
-
-  function actionButtons(u, status) {
-    const emailEnc = encodeURIComponent(u.email || '');
-    let html = infoButton(u, status);
-    if (CAN_EDIT) {
-      if (status === 'pending') {
-        html += '<button type="button" class="btn btn-sm btn-success btn-icon approve-btn" data-email="'+emailEnc+'" title="Approve"><i class="fas fa-check"></i></button>';
-        html += '<button type="button" class="btn btn-sm btn-warning btn-icon reject-btn"  data-email="'+emailEnc+'" title="Reject"><i class="fas fa-times"></i></button>';
-      }
-      html += '<button type="button" class="btn btn-sm btn-danger btn-icon delete-btn" data-email="'+emailEnc+'" title="Delete"><i class="fas fa-trash"></i></button>';
-    }
-    return html;
-  }
-
-  function toTableData(status) {
-    var arr = status === 'approved' ? (payload.approved_users || [])
-            : status === 'rejected' ? (payload.rejected_users || [])
-            : (payload.pending_users || []);
-    return arr.map(function(u){
-      return {
-        email: u.email || '',
-        phone: u.phone || '—',
-        device_uuid: u.device_uuid || '—',
-        action_html: actionButtons(u, status)
-      };
-    });
-  }
-
-  function initTableOnce() {
-    if (dt) return;
-    dt = $('#usersTable').DataTable({
-      autoWidth: false,
-      dom: 'lBtp',   // نعرض length + أزرار (سنخفي أزرار DT ونستخدم المخصّصة)
-      pageLength: 25,
-      data: [],
-      columns: [
-        { data: 'email', title: 'Email' },
-        { data: 'phone', title: 'Phone' },
-        { data: 'device_uuid', title: 'Device UUID', className: 'd-none d-md-table-cell' },
-        { data: 'action_html', title: 'Action', orderable: false, className: 'text-center' }
-      ],
-      buttons: [
-        { extend: 'excel', title: () => 'users_' + currentStatus,
-          exportOptions: { columns: ':visible:not(:last-child)' } },
-        { extend: 'pdf',   title: () => 'users_' + currentStatus,
-          orientation: 'landscape', pageSize: 'A4',
-          exportOptions: { columns: ':visible:not(:last-child)' } },
-        { extend: 'print', title: () => 'Users - ' + currentStatus.toUpperCase(),
-          exportOptions: { columns: ':visible:not(:last-child)' } }
-      ],
-      initComplete: function(){
-        /* انقل عنصر "Show _MENU_ entries" إلى يسار شريط الأدوات */
-        const $len = $('#usersTable_length');
-        if ($len.length) {
-          $len.find('label').appendTo('#toolbar .length-slot');     // ضع الليبل كاملاً
-          $len.remove();                                            // أزل الغلاف القديم
-        }
-      }
-    });
-  }
-
-  function redraw(status) {
-    currentStatus = status || currentStatus;
-    initTableOnce();
-    dt.clear().rows.add(toTableData(currentStatus)).draw();
-    const q = $('#globalSearch').val() || '';
-    if (q) dt.search(q).draw();
-  }
-
-  function refreshCounts() {
-    $('#countPending').text((payload.pending_users || []).length);
-    $('#countApproved').text((payload.approved_users || []).length);
-    $('#countRejected').text((payload.rejected_users || []).length);
-  }
-
-  function wireRefresh(){
-    $('#refresh-btn').off('click').on('click', function(e){
-      e.preventDefault();
-      fetchUsers();
-    });
-  }
-
-  function fetchUsers() {
-    $("#refresh-btn").prop("disabled", true).html('<i class="fas fa-spinner fa-spin"></i>');
-    $.get("/newadmin_data")
-      .done(function (data) {
-        payload = {
-          pending_users:  data.pending_users  || [],
-          approved_users: data.approved_users || [],
-          rejected_users: data.rejected_users || []
-        };
-        refreshCounts();
-        redraw(currentStatus);
-      })
-      .fail(function () {
-        $('#notification').text("Error loading user data.").fadeIn().delay(2500).fadeOut();
-      })
-      .always(function () {
-        $("#refresh-btn").prop("disabled", false).html('<i class="fas fa-sync-alt"></i>');
-        wireRefresh();
-      });
-  }
-
-  // ===== Actions
-  $(document).on("click", ".approve-btn", function (e) {
-    e.preventDefault();
-    const email = String($(this).data("email") || '');
-    $.post("/newapprove/" + email)
-      .done(function(){ fetchUsers(); })
-      .fail(function(xhr){ alert("Approval failed: " + (xhr.responseText || xhr.status)); });
-  });
-
-  $(document).on("click", ".reject-btn", function (e) {
-    e.preventDefault();
-    const email = String($(this).data("email") || '');
-    $.post("/newreject/" + email)
-      .done(function(){ fetchUsers(); })
-      .fail(function(xhr){ alert("Rejection failed: " + (xhr.responseText || xhr.status)); });
-  });
-
-  $(document).on("click", ".delete-btn", function (e) {
-    e.preventDefault();
-    const email = String($(this).data("email") || '');
-    if (!confirm("Delete this user?")) return;
-    $.post("/newdelete_user/" + email)
-      .done(function(){ fetchUsers(); })
-      .fail(function(xhr){ alert("Delete failed: " + (xhr.responseText || xhr.status)); });
-  });
-
-  // ===== More Info modal
-  $(document).on("click", ".info-btn", function(){
-    $('#m_email').text($(this).data('email') || '—');
-    $('#m_phone').text($(this).data('phone') || '—');
-    $('#m_company').text($(this).data('company') || '—');
-    $('#m_device_name').text($(this).data('device_name') || '—');
-    $('#m_device_uuid').text($(this).data('device_uuid') || '—');
-    $('#m_registered_at').text($(this).data('registered') || '—');
-    $('#m_status').html(badge($(this).data('status') || 'pending'));
-    new bootstrap.Modal(document.getElementById("deviceInfoModal")).show();
-  });
-
-  // ===== Toolbar hooks
-  $(function () {
-    // تفعيل التصدير من الأزرار العليا
-    $('#btnExcel').on('click', function(){ if (dt) dt.button(0).trigger(); });
-    $('#btnPDF').on('click',   function(){ if (dt) dt.button(1).trigger(); });
-    $('#btnPrint').on('click', function(){ if (dt) dt.button(2).trigger(); });
-
-    $('#globalSearch').on('input', function(){ if (dt) dt.search(this.value).draw(); });
-
-    $('[data-status]').on('click', function(){
-      $('[data-status]').removeClass('active');
-      $(this).addClass('active');
-      redraw($(this).data('status'));
-    });
-
-    wireRefresh();
-    initTableOnce();
-    fetchUsers();
-  });
 </script>
+
+<!-- Pass role -->
+<script>
+  window.ADMIN_ROLE = {{ (admin_role or '')|tojson|safe }};
+</script>
+
+<!-- External page script -->
+<script src="{{ url_for('static', filename='js/newadmin.js') }}?v=1.3.6"></script>
 
 {% endblock %}

@@ -1,173 +1,213 @@
 # newadmin.py
 from flask import (
-    Blueprint,
-    render_template,
-    session,
-    redirect,
-    url_for,
-    request,
-    jsonify,
-    flash,
-    g,
+    Blueprint, render_template, session, redirect, url_for,
+    request, jsonify, flash, abort, g
 )
-import logging
+from functools import wraps
+from urllib.parse import unquote
 
-from auth_utils import roles_required, normalize_role
+# دوال الـ DAL
 from api_handler import (
-    get_pending_users,
-    get_approved_users,
-    get_rejected_users,
-    approve_user,
-    reject_user,
-    delete_user,
-    add_admin_user,
-    log_admin_action,
+    get_pending_users, get_approved_users, get_rejected_users,
+    approve_user, reject_user, delete_user, add_admin_user
 )
+
+# log_admin_action قد لا تكون موجودة في بعض الإصدارات؛ سنحاول استيرادها إن وجدت
+try:
+    from api_handler import log_admin_action as _log_admin_action
+except Exception:  # pragma: no cover
+    _log_admin_action = None
 
 newadmin_bp = Blueprint("newadmin", __name__, url_prefix="")
 
 # ------------------------------
-# Common guards and context
+# Helpers: role-based authorization + context
 # ------------------------------
+
+def _normalize_role(value: str, default: str = "limited") -> str:
+    """Trim + lowercase for consistent comparisons."""
+    return (value if value is not None else default).strip().lower()
+
+
+def roles_required(*allowed_roles):
+    """
+    Decorator to protect routes by role.
+    - Requires user to be logged in.
+    - Allows only roles listed in `allowed_roles` (normalized).
+    """
+    normalized_allowed = {_normalize_role(r, "") for r in allowed_roles}
+
+    def decorator(f):
+        @wraps(f)
+        def wrapper(*args, **kwargs):
+            if not session.get("admin_logged_in"):
+                return redirect(url_for("login"))
+            role = _normalize_role(session.get("admin_role"))
+            if role not in normalized_allowed:
+                abort(403)  # Forbidden
+            # Expose role to request/template contexts
+            g.admin_role = role
+            return f(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
 @newadmin_bp.before_request
 def _enforce_login_and_context():
+    """Enforce login for all blueprint routes. Also prime g.admin_role (normalized) for templates."""
     if not session.get("admin_logged_in"):
         return redirect(url_for("login"))
-    g.admin_role = normalize_role(session.get("admin_role"))
-    g.admin_company = (session.get("admin_company") or "").strip()
+    g.admin_role = _normalize_role(session.get("admin_role"))
+
 
 @newadmin_bp.app_context_processor
 def inject_role():
+    """Inject the current admin role into all templates as `admin_role` (normalized)."""
+    return {"admin_role": _normalize_role(session.get("admin_role"))}
+
+
+def _company_filter_from_session():
+    """
+    يعيد اسم الشركة المستخدم لتقييد الرؤية إن وُجد.
+    - super أو company == 'All' => None (عرض الكل)
+    - غير ذلك => اسم الشركة من الجلسة
+    """
+    role = _normalize_role(session.get("admin_role"))
+    company = (session.get("admin_company") or "").strip()
+    if role == "super" or company.lower() == "all" or not company:
+        return None
+    return company
+
+
+def _normalize_user(u: dict) -> dict:
+    """تطبيع مفاتيح المستخدمين لتوافق واجهة DataTables."""
     return {
-        "admin_role": normalize_role(session.get("admin_role")),
-        "admin_company": (session.get("admin_company") or "").strip(),
+        "email": u.get("email"),
+        "phone": u.get("phone"),
+        "company": u.get("company") or u.get("company_name") or "",
+        "device_name": u.get("device_name"),
+        "device_uuid": u.get("device_uuid"),
+        "created_at": u.get("created_at"),
     }
 
-def _company_filter():
+
+def _fetch_with_optional_company(fn, company_filter):
     """
-    Return None to disable filtering (see all) when:
-      - role is super, OR
-      - admin_company equals 'All' (case-insensitive).
-    Otherwise return the admin's company.
+    يستدعي دالة DAL مع باراميتر الشركة إن كانت تدعمه،
+    وإلا يستدعيها بدون باراميتر (توافقًا مع إصدارات أقدم).
     """
-    role = normalize_role(session.get("admin_role"))
-    if role == "super":
-        return None
-    name = (session.get("admin_company") or "").strip()
-    if name.lower() == "all":
-        return None
-    return name or None
+    try:
+        return fn(company_filter)
+    except TypeError:
+        # نسخة قديمة لا تقبل باراميتر
+        return fn()
+
+
+def _ensure_can_edit():
+    role = _normalize_role(session.get("admin_role"))
+    if role not in ("super", "limited"):
+        abort(403)
+
+
+def _log(action: str, details: str = ""):
+    if _log_admin_action:
+        try:
+            _log_admin_action(
+                admin_username=session.get("admin_user") or "unknown",
+                action=action,
+                details=details,
+                ip_address=request.remote_addr,
+            )
+        except Exception:
+            # لا نعطل الطلب بسبب فشل السجل
+            pass
+
 
 # ------------------------------
 # Dashboard (landing)
 # ------------------------------
 @newadmin_bp.route("/admin-dashboard")
 def admin_dashboard():
+    # أي أدمن مسجّل دخول
     return render_template("dashboard.html")
 
+
 # ------------------------------
-# Users page — super + limited + viewer
+# Users page — super + limited + viewer (viewer = عرض فقط)
 # ------------------------------
 @newadmin_bp.route("/newadmin")
 @roles_required("super", "limited", "viewer")
 def newadmin_page():
-    company_name = _company_filter()
-    pending_users = get_pending_users(company_name) or []
-    approved_users = get_approved_users(company_name) or []
-    rejected_users = get_rejected_users(company_name) or []
-    return render_template(
-        "newadmin.html",
-        pending_count=len(pending_users),
-        approved_count=len(approved_users),
-        rejected_count=len(rejected_users),
-    )
+    # الصفحة نفسها لا تحتاج عدّادات من السيرفر (الواجهة تجلبها AJAX)
+    return render_template("newadmin.html")
+
 
 # ------------------------------
-# Users data (JSON)
+# Users data (JSON) — super + limited + viewer
 # ------------------------------
 @newadmin_bp.route("/newadmin_data")
 @roles_required("super", "limited", "viewer")
 def admin_data():
-    company_name = _company_filter()
+    filt = _company_filter_from_session()
+    pending_raw = _fetch_with_optional_company(get_pending_users, filt) or []
+    approved_raw = _fetch_with_optional_company(get_approved_users, filt) or []
+    rejected_raw = _fetch_with_optional_company(get_rejected_users, filt) or []
+
     return jsonify(
         {
-            "pending_users": format_users(get_pending_users(company_name) or []),
-            "approved_users": format_users(get_approved_users(company_name) or []),
-            "rejected_users": format_users(get_rejected_users(company_name) or []),
+            "pending_users": [_normalize_user(u) for u in pending_raw],
+            "approved_users": [_normalize_user(u) for u in approved_raw],
+            "rejected_users": [_normalize_user(u) for u in rejected_raw],
         }
     )
 
-# ------------------------------
-# Sensitive actions — with DB logging
-# ------------------------------
-@newadmin_bp.route("/newapprove/<string:email>", methods=["POST"])
-@roles_required("super", "limited")
-def newapprove(email: str):
-    admin_user = session.get("admin_user", "unknown")
-    logging.info("Approve request by admin=%s for user=%s", admin_user, email)
-    result = approve_user(email)
-    ok = (result is True)
-    if ok:
-        logging.info("User approved: %s by admin=%s", email, admin_user)
-        try:
-            log_admin_action(
-                admin_user,
-                "approve_user",
-                f"Approved user {email}",
-                request.remote_addr,
-            )
-        except Exception as e:
-            logging.warning("DB log (approve_user) failed: %s", e)
-    else:
-        logging.error("Approve failed for %s by admin=%s: %s", email, admin_user, result)
-    return jsonify({"success": ok, "message": "OK" if ok else str(result)}), (200 if ok else 400)
-
-@newadmin_bp.route("/newreject/<string:email>", methods=["POST"])
-@roles_required("super", "limited")
-def newreject(email: str):
-    admin_user = session.get("admin_user", "unknown")
-    logging.info("Reject request by admin=%s for user=%s", admin_user, email)
-    result = reject_user(email)
-    ok = (result is True)
-    if ok:
-        logging.info("User rejected: %s by admin=%s", email, admin_user)
-        try:
-            log_admin_action(
-                admin_user,
-                "reject_user",
-                f"Rejected user {email}",
-                request.remote_addr,
-            )
-        except Exception as e:
-            logging.warning("DB log (reject_user) failed: %s", e)
-    else:
-        logging.error("Reject failed for %s by admin=%s: %s", email, admin_user, result)
-    return jsonify({"success": ok, "message": "OK" if ok else str(result)}), (200 if ok else 400)
-
-@newadmin_bp.route("/newdelete_user/<string:email>", methods=["POST", "DELETE"])
-@roles_required("super", "limited")
-def newdelete_user(email: str):
-    admin_user = session.get("admin_user", "unknown")
-    logging.info("Delete request by admin=%s for user=%s", admin_user, email)
-    result = delete_user(email)
-    ok = (result is True)
-    if ok:
-        logging.info("User deleted: %s by admin=%s", email, admin_user)
-        try:
-            log_admin_action(
-                admin_user,
-                "delete_user",
-                f"Deleted user {email}",
-                request.remote_addr,
-            )
-        except Exception as e:
-            logging.warning("DB log (delete_user) failed: %s", e)
-    else:
-        logging.error("Delete failed for %s by admin=%s: %s", email, admin_user, result)
-    return jsonify({"success": ok, "message": "OK" if ok else str(result)}), (200 if ok else 400)
 
 # ------------------------------
-# Admin add (manage admins)
+# Sensitive actions — super + limited (viewer ممنوع)
+# ------------------------------
+@newadmin_bp.route("/newapprove/<path:email>", methods=["POST"])
+@roles_required("super", "limited")
+def newapprove(email):
+    _ensure_can_edit()
+    email = unquote(email)
+    res = approve_user(email)
+    ok = res is True
+    if ok:
+        _log("approve_user", f"email={email}")
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": str(res)}), 400
+
+
+@newadmin_bp.route("/newreject/<path:email>", methods=["POST"])
+@roles_required("super", "limited")
+def newreject(email):
+    _ensure_can_edit()
+    email = unquote(email)
+    res = reject_user(email)
+    ok = res is True
+    if ok:
+        _log("reject_user", f"email={email}")
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": str(res)}), 400
+
+
+@newadmin_bp.route("/newdelete_user/<path:email>", methods=["POST", "DELETE"])
+@roles_required("super", "limited")
+def newdelete_user(email):
+    _ensure_can_edit()
+    email = unquote(email)
+    res = delete_user(email)
+    ok = res is True
+    if ok:
+        _log("delete_user", f"email={email}")
+        return jsonify({"ok": True})
+    return jsonify({"ok": False, "error": str(res)}), 400
+
+
+# ------------------------------
+# Admin add (manage admins) — super only (اختياري)
 # ------------------------------
 @newadmin_bp.route("/admin-add", methods=["GET", "POST"])
 @roles_required("super")
@@ -180,7 +220,6 @@ def admin_add():
         role = (request.form.get("role", "viewer") or "viewer").strip().lower()
         is_active = 1 if (request.form.get("is_active") in ("on", "1", "true", "True")) else 0
 
-        # Minimal checks
         if not username:
             flash("Username is required.", "danger")
             return render_template("admin_add.html")
@@ -188,61 +227,11 @@ def admin_add():
             flash("Password must be at least 8 characters.", "danger")
             return render_template("admin_add.html")
 
-        # Pass company_name to DB layer
         result = add_admin_user(username, password, role, is_active, email, company_name)
-
         if result is True:
-            logging.info(
-                "Admin added: %s by super=%s (email=%s, company=%s, role=%s, active=%s)",
-                username,
-                session.get("admin_user", "unknown"),
-                email,
-                company_name,
-                role,
-                is_active,
-            )
-            try:
-                log_admin_action(
-                    session.get("admin_user"),
-                    "add_admin",
-                    f"Added admin username={username}, email={email}, company={company_name}, role={role}, active={is_active}",
-                    request.remote_addr,
-                )
-            except Exception as e:
-                logging.warning("DB log (add_admin) failed: %s", e)
-
             flash("Admin added successfully!", "success")
             return redirect(url_for("admin_manage"))
         else:
-            logging.error(
-                "Failed to add admin=%s by super=%s: %s",
-                username,
-                session.get("admin_user", "unknown"),
-                result,
-            )
             flash(str(result), "danger")
-
     return render_template("admin_add.html")
 
-# ------------------------------
-# Utils
-# ------------------------------
-def format_users(users):
-    """
-    Normalize rows coming from DB (api_handler). The DB column is `company_name`,
-    and we expose it to the front-end as `company`.
-    """
-    return [
-        {
-            "email": u.get("email"),
-            "phone": u.get("phone"),
-            "device_name": u.get("device_name", "N/A"),
-            "device_type": u.get("device_type", "N/A"),
-            "ip_address": u.get("ip_address", "N/A"),
-            "registered_at": u.get("created_at", "N/A"),
-            "device_uuid": u.get("device_uuid", "N/A"),
-            # NEW: expose company name
-            "company": (u.get("company") or u.get("company_name") or "—"),
-        }
-        for u in users
-    ]
