@@ -16,6 +16,7 @@ from email.mime.text import MIMEText
 import os
 import sys
 import logging
+import hashlib
 from datetime import timedelta
 from notify import notify_new_user_request
 
@@ -77,6 +78,9 @@ def _send_email(to_email: str, subject: str, html: str):
     use_tls = os.getenv("SMTP_USE_TLS", "1") == "1"
     use_ssl = os.getenv("SMTP_USE_SSL", "0") == "1"
     from_email = os.getenv("NOTIFY_FROM", user)
+    # === NEW: optional sender display name ===
+    from_name = os.getenv("NOTIFY_FROM_NAME", "").strip()
+    msg_from = f"{from_name} <{from_email}>" if from_name else from_email
 
     if not (host and port and user and pwd and from_email):
         app.logger.error("SMTP is not configured properly.")
@@ -84,7 +88,7 @@ def _send_email(to_email: str, subject: str, html: str):
 
     msg = MIMEText(html, "html", "utf-8")
     msg["Subject"] = subject
-    msg["From"] = from_email
+    msg["From"] = msg_from
     msg["To"] = to_email
 
     try:
@@ -103,6 +107,40 @@ def _send_email(to_email: str, subject: str, html: str):
         app.logger.exception("Send email failed: %s", e)
         return False, str(e)
 
+# ---- Single-use reset token helpers (DB) ----
+def _ensure_used_tokens_table():
+    """Create table if not exists (idempotent)."""
+    try:
+        sql = """
+        CREATE TABLE IF NOT EXISTS used_reset_tokens (
+            token_hash VARCHAR(64) PRIMARY KEY,
+            used_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+        execute_query(sql, [], fetch=False)
+    except Exception as e:
+        app.logger.warning("Failed ensuring used_reset_tokens table: %s", e)
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256((token or "").encode()).hexdigest()
+
+def _is_reset_token_used(token: str) -> bool:
+    try:
+        _ensure_used_tokens_table()
+        th = _token_hash(token)
+        rows = execute_query("SELECT 1 FROM used_reset_tokens WHERE token_hash=%s", [th], fetch=True) or []
+        return bool(rows)
+    except Exception as e:
+        app.logger.warning("Check token used failed: %s", e)
+        return False  # fail-open for availability, but we still have signature+expiry checks
+
+def _mark_reset_token_used(token: str):
+    try:
+        _ensure_used_tokens_table()
+        th = _token_hash(token)
+        execute_query("INSERT IGNORE INTO used_reset_tokens (token_hash) VALUES (%s)", [th], fetch=False)
+    except Exception as e:
+        app.logger.warning("Mark token used failed: %s", e)
 
 # ---- Logging: file + console ----
 log_format = "%(asctime)s [%(levelname)s] %(filename)s:%(lineno)d - %(message)s"
@@ -181,8 +219,6 @@ def login():
             error = err or "Login failed"
     return render_template("login.html", error=error)
 
-
-
 # ---------------- Forgot / Reset password (self-service by email) ----------------
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
@@ -219,13 +255,17 @@ def forgot_password():
     # GET Only display the form
     return render_template("forgot_password.html")
 
-
 @app.route("/reset-password", methods=["GET", "POST"])
 def reset_password():
     error = None
     message = None
     show_form = True
     token = request.values.get("token", "")
+
+    # === NEW: block if token already used ===
+    if _is_reset_token_used(token):
+        error = "This password reset link has already been used."
+        return render_template("reset_password.html", error=error, show_form=False)
 
     if request.method == "GET":
         try:
@@ -248,6 +288,11 @@ def reset_password():
     if new_password != confirm:
         return render_template("reset_password.html", token=token, error="Passwords do not match.", show_form=True)
 
+    # Re-check single-use before committing
+    if _is_reset_token_used(token):
+        error = "This password reset link has already been used."
+        return render_template("reset_password.html", error=error, show_form=False)
+
     try:
         s = _get_serializer()
         data = s.loads(token, max_age=PASSWORD_RESET_EXP_SECONDS)
@@ -257,6 +302,8 @@ def reset_password():
 
         ok = update_admin_password(admin_id, new_password)
         if ok is True:
+            # === NEW: mark token as used AFTER successful password change ===
+            _mark_reset_token_used(token)
             message = "Your new password has been set successfully. You can log in now."
             show_form = False
         else:
@@ -272,8 +319,6 @@ def reset_password():
         error = "An unexpected error occurred."
 
     return render_template("reset_password.html", token=token, message=message, error=error, show_form=show_form)
-
-
 
 @app.route("/logout")
 def logout():
@@ -790,7 +835,6 @@ def hook_new_user_request():
         return jsonify({"ok": True, "message": "Notification sent."})
     return jsonify({"ok": False, "error": "Failed to send email"}), 500
 
-
 # ---------------- Task: notify pending DB registrations ----------------
 @app.route("/tasks/notify-pending", methods=["POST", "GET"])
 def tasks_notify_pending():
@@ -877,7 +921,6 @@ def tasks_notify_pending():
             app.logger.error("Email notify failed for user=%s", email)
 
     return jsonify({"ok": True, "processed": processed})
-
 
 if __name__ == "__main__":
     app.run(debug=True)

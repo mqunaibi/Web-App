@@ -5,14 +5,14 @@ Email notification service for: 'New user approval requested'
 - Reads SMTP settings from .env (TLS/SSL)
 - To/From from .env; also supports NOTIFY_CC / NOTIFY_BCC
 - Optional branding logo via LOGO_URL
-- Backward/forward compatible parameter names:
-    email/user_email, name/user_name
+- Supports display name via NOTIFY_FROM_NAME
 """
 
 import os
 import logging
 import smtplib
 from email.message import EmailMessage
+from email.utils import formataddr
 from typing import List, Optional, Dict, Any
 from dotenv import load_dotenv
 
@@ -28,6 +28,7 @@ SMTP_USE_SSL = (os.getenv("SMTP_USE_SSL", "0").strip() == "1")
 
 # Addresses
 NOTIFY_FROM = (os.getenv("NOTIFY_FROM") or SMTP_USER or "").strip()
+NOTIFY_FROM_NAME = (os.getenv("NOTIFY_FROM_NAME") or "").strip()
 DEFAULT_TO = (os.getenv("NOTIFY_TO") or "").strip()
 
 # Branding / Copies
@@ -39,7 +40,6 @@ NOTIFY_BCC_ENV = (os.getenv("NOTIFY_BCC") or "").strip()
 def _split_emails(s: str) -> List[str]:
     if not s:
         return []
-    # allow comma or semicolon separated, and trim spaces
     return [p.strip() for p in s.replace(";", ",").split(",") if p.strip()]
 
 def _connect_smtp():
@@ -78,14 +78,19 @@ def send_email(
         logging.error("Notification failed: sender address not set (NOTIFY_FROM/SMTP_USER).")
         return False
 
+    # Display name
+    if NOTIFY_FROM_NAME:
+        from_header = formataddr((NOTIFY_FROM_NAME, from_addr))
+    else:
+        from_header = from_addr
+
     if not text_body:
-        # crude fallback: strip tags for text part
         import re
         text_body = re.sub(r"<[^>]+>", "", html_body or "").strip()
 
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = from_addr
+    msg["From"] = from_header
     msg["To"] = ", ".join(to)
     if cc:
         msg["Cc"] = ", ".join(cc)
@@ -104,20 +109,15 @@ def send_email(
         return False
 
 def notify_new_user_request(
-    # Compatible names
     email: Optional[str] = None,
     user_email: Optional[str] = None,
     name: Optional[str] = None,
     user_name: Optional[str] = None,
-
-    # Optional metadata
     device_name: str = "",
     device_uuid: str = "",
     ip_address: str = "",
     requested_at: Optional[str] = None,
     extra: Optional[Dict[str, Any]] = None,
-
-    # Optional override
     admin_panel_url: Optional[str] = None,
 ) -> bool:
     """Sends a styled 'New user approval request' email."""
@@ -146,7 +146,6 @@ def notify_new_user_request(
       </tr>
     """ if LOGO_URL else ""
 
-    # Build detail rows
     details_rows = []
     if who_name:
         details_rows.append(f"<tr><td style='padding:4px 0'><strong>Name:</strong> {who_name}</td></tr>")
@@ -157,7 +156,6 @@ def notify_new_user_request(
     if requested_at:
         details_rows.append(f"<tr><td style='padding:4px 0'><strong>Requested At:</strong> {requested_at}</td></tr>")
 
-    # Append extra (ignore keys already displayed)
     for k, v in extra.items():
         if k in {"device_name", "device", "device_uuid", "uuid", "ip"}:
             continue
