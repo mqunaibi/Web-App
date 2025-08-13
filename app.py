@@ -186,7 +186,6 @@ def login():
 # ---------------- Forgot / Reset password (self-service by email) ----------------
 @app.route("/forgot-password", methods=["GET", "POST"])
 def forgot_password():
-    message = None
     if request.method == "POST":
         email = (request.form.get("email") or "").strip().lower()
         admin = None
@@ -213,10 +212,12 @@ def forgot_password():
         except Exception as e:
             app.logger.exception("forgot-password failed: %s", e)
 
-        message = "If the email is registered, a password reset link has been sent."
-        return render_template("forgot_password.html", message=message)
+        # PRG: Do not display the 'Submission Successful' page — redirect to /login with a flash message
+        flash("If the email is registered, a password reset link has been sent.", "info")
+        return redirect(url_for("login"), code=303)
 
-    return render_template("forgot_password.html", message=message)
+    # GET Only display the form
+    return render_template("forgot_password.html")
 
 
 @app.route("/reset-password", methods=["GET", "POST"])

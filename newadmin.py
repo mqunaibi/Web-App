@@ -6,13 +6,13 @@ from flask import (
 from functools import wraps
 from urllib.parse import unquote
 
-# دوال الـ DAL
+# DAL functions
 from api_handler import (
     get_pending_users, get_approved_users, get_rejected_users,
     approve_user, reject_user, delete_user, add_admin_user
 )
 
-# log_admin_action قد لا تكون موجودة في بعض الإصدارات؛ سنحاول استيرادها إن وجدت
+# log_admin_action may not exist in some versions; try importing if available
 try:
     from api_handler import log_admin_action as _log_admin_action
 except Exception:  # pragma: no cover
@@ -56,7 +56,7 @@ def roles_required(*allowed_roles):
 
 @newadmin_bp.before_request
 def _enforce_login_and_context():
-    """Enforce login for all blueprint routes. Also prime g.admin_role (normalized) for templates."""
+    """Enforce login for all blueprint routes. Also set g.admin_role (normalized) for templates."""
     if not session.get("admin_logged_in"):
         return redirect(url_for("login"))
     g.admin_role = _normalize_role(session.get("admin_role"))
@@ -70,9 +70,9 @@ def inject_role():
 
 def _company_filter_from_session():
     """
-    يعيد اسم الشركة المستخدم لتقييد الرؤية إن وُجد.
-    - super أو company == 'All' => None (عرض الكل)
-    - غير ذلك => اسم الشركة من الجلسة
+    Returns the company name to restrict visibility if applicable.
+    - super or company == 'All' => None (show all)
+    - otherwise => company name from session
     """
     role = _normalize_role(session.get("admin_role"))
     company = (session.get("admin_company") or "").strip()
@@ -82,7 +82,7 @@ def _company_filter_from_session():
 
 
 def _normalize_user(u: dict) -> dict:
-    """تطبيع مفاتيح المستخدمين لتوافق واجهة DataTables."""
+    """Normalize user keys to match DataTables interface."""
     return {
         "email": u.get("email"),
         "phone": u.get("phone"),
@@ -95,13 +95,13 @@ def _normalize_user(u: dict) -> dict:
 
 def _fetch_with_optional_company(fn, company_filter):
     """
-    يستدعي دالة DAL مع باراميتر الشركة إن كانت تدعمه،
-    وإلا يستدعيها بدون باراميتر (توافقًا مع إصدارات أقدم).
+    Call a DAL function with the company parameter if supported,
+    otherwise call it without parameters (for backward compatibility).
     """
     try:
         return fn(company_filter)
     except TypeError:
-        # نسخة قديمة لا تقبل باراميتر
+        # Older version does not accept company parameter
         return fn()
 
 
@@ -121,7 +121,7 @@ def _log(action: str, details: str = ""):
                 ip_address=request.remote_addr,
             )
         except Exception:
-            # لا نعطل الطلب بسبب فشل السجل
+            # Do not break request because of logging failure
             pass
 
 
@@ -130,17 +130,17 @@ def _log(action: str, details: str = ""):
 # ------------------------------
 @newadmin_bp.route("/admin-dashboard")
 def admin_dashboard():
-    # أي أدمن مسجّل دخول
+    # Any logged-in admin
     return render_template("dashboard.html")
 
 
 # ------------------------------
-# Users page — super + limited + viewer (viewer = عرض فقط)
+# Users page — super + limited + viewer (viewer = read-only)
 # ------------------------------
 @newadmin_bp.route("/newadmin")
 @roles_required("super", "limited", "viewer")
 def newadmin_page():
-    # الصفحة نفسها لا تحتاج عدّادات من السيرفر (الواجهة تجلبها AJAX)
+    # Page itself does not need counters from the server (frontend fetches via AJAX)
     return render_template("newadmin.html")
 
 
@@ -165,7 +165,7 @@ def admin_data():
 
 
 # ------------------------------
-# Sensitive actions — super + limited (viewer ممنوع)
+# Sensitive actions — super + limited (viewer not allowed)
 # ------------------------------
 @newadmin_bp.route("/newapprove/<path:email>", methods=["POST"])
 @roles_required("super", "limited")
@@ -207,7 +207,7 @@ def newdelete_user(email):
 
 
 # ------------------------------
-# Admin add (manage admins) — super only (اختياري)
+# Admin add (manage admins) — super only (optional)
 # ------------------------------
 @newadmin_bp.route("/admin-add", methods=["GET", "POST"])
 @roles_required("super")
@@ -234,4 +234,3 @@ def admin_add():
         else:
             flash(str(result), "danger")
     return render_template("admin_add.html")
-

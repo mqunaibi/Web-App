@@ -256,7 +256,7 @@ def add_admin_user(
 ):
     """Always store with the modern hashing method (HASH_METHOD)."""
     hashed = generate_password_hash(password, method=HASH_METHOD)
-    # 4 حالات لتبسيط الإدراج حسب القيم المتاحة
+    # 4 cases to simplify insertion based on the available values
     if email is None and company_name is None:
         return execute_query(
             "INSERT INTO admin_users (username, password, role, is_active, created_at) "
@@ -290,7 +290,7 @@ def update_admin_user(
     email: str | None = None,
     company_name: str | None = None,
 ):
-    # 4 حالات للتحديث حسب الحقول المرسلة
+    # 4 update cases based on the submitted fields
     if email is None and company_name is None:
         return execute_query(
             "UPDATE admin_users SET username = %s, role = %s, is_active = %s WHERE id = %s",

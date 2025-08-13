@@ -67,22 +67,21 @@
           <p class="big-code">403</p>
           <h1 class="mt-2 mb-3">Access Denied</h1>
 
-          <!-- رسالة ثنائية اللغة -->
+          <!-- Bilingual message -->
           <p class="lead mb-2">You don’t have permission to access this page.</p>
           
-
           <p class="hint mb-4">
             If you believe this is an error, please contact an administrator.
           </p>
 
           <div class="d-flex flex-wrap gap-2 justify-content-center">
             {% if session.get('admin_logged_in') %}
-              <!-- لو المستخدم مسجل دخول: زر للوحة -->
+              <!-- If the user is logged in: dashboard button -->
               <a href="{{ url_for('newadmin.admin_dashboard') }}" class="btn btn-primary btn-pill">
                 <i class="fa-solid fa-gauge-high me-2"></i> Go to Dashboard
               </a>
               {% if session.get('admin_role') in ['limited','viewer'] %}
-                <!-- اختصار لصفحة newadmin حسب صلاحياتك -->
+                <!-- Shortcut to newadmin page based on your role -->
                 <a href="{{ url_for('newadmin.newadmin_page') }}" class="btn btn-outline-primary btn-pill">
                   <i class="fa-solid fa-users-viewfinder me-2"></i> Open User Management
                 </a>
@@ -91,7 +90,7 @@
                 <i class="fa-solid fa-right-from-bracket me-2"></i> Logout
               </a>
             {% else %}
-              <!-- لو غير مسجل دخول: زر تسجيل الدخول -->
+              <!-- If not logged in: login button -->
               <a href="{{ url_for('login') }}" class="btn btn-primary btn-pill">
                 <i class="fa-solid fa-right-to-bracket me-2"></i> Login
               </a>

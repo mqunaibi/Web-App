@@ -6,7 +6,6 @@
 <link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.bootstrap5.min.css">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/table_columns.css') }}">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
-<!-- SweetAlert2 CSS -->
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
 
 <style>
@@ -39,34 +38,31 @@
   }
   .btn-icon i{ font-size:12px; line-height:1; }
   .btn-icon:hover{ transform:scale(1.1); background-color:rgba(0,0,0,.05); }
-  #usersTable td .btn-icon{ margin:0 !important; } /* reset any margins */
+  #usersTable td .btn-icon{ margin:0 !important; }
 
   #usersTable th.actions-cell, #usersTable td.actions-cell{
     white-space:nowrap; width:1%;
   }
 
-  /* container for row action buttons */
-  .actions-wrap{
-    display:inline-flex; align-items:center; flex-wrap:nowrap;
-    gap:.6rem;                    /* ← spacing between buttons */
-  }
-  /* Fallback for browsers without flex-gap support */
+  .actions-wrap{ display:inline-flex; align-items:center; flex-wrap:nowrap; gap:.6rem; }
   @supports not (gap: .6rem){
     .actions-wrap > .btn-icon{ margin-right:.6rem; }
     .actions-wrap > .btn-icon:last-child{ margin-right:0; }
   }
 
-  /* Keep borders on last column */
   #usersTable th:last-child, #usersTable td:last-child{
     border-left:1px solid #dee2e6; border-right:1px solid #dee2e6;
   }
   #usersTable td, #usersTable th{ vertical-align:middle; }
 
-  /* Modal spacing */
   #deviceInfoModal .lh-lg > div{ margin-bottom:.25rem; }
-
-  /* Extra spacing between SweetAlert2 dialog buttons */
   .swal2-actions{ gap:.75rem !important; }
+
+  /* ===== Pagination (as in admin_logs.html) ===== */
+  /* Hide default DataTables pagination */
+  .dataTables_wrapper .dataTables_paginate{ display:none !important; }
+  /* Small spacing above pagination */
+  nav .pagination { margin-top:.5rem; }
 </style>
 
 <div class="container py-3">
@@ -128,6 +124,11 @@
       <tbody></tbody>
     </table>
   </div>
+
+  <!-- Pagination (same as admin_logs.html) -->
+  <nav>
+    <ul class="pagination justify-content-center" id="pager"></ul>
+  </nav>
 </div>
 
 <!-- More Info Modal -->
@@ -153,43 +154,90 @@
   </div>
 </div>
 
-<!-- Scripts (local first) -->
+<!-- Scripts -->
 <script src="{{ url_for('static', filename='js/jquery-3.6.0.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/bootstrap.bundle.min.js') }}"></script>
 <script src="{{ url_for('static', filename='js/jquery.dataTables.min.js') }}"></script>
-
-<!-- DataTables + Buttons (CDN) -->
 <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.bootstrap5.min.js"></script>
-
-<!-- Export deps -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
 <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
-
-<!-- SweetAlert2 -->
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
-<!-- Patch: force Cancel button on all non-toast Swal.fire dialogs -->
+<!-- Patch: always show Cancel button on all non-toast Swal.fire dialogs -->
 <script>
   if (window.Swal && typeof Swal.fire === 'function') {
     const _orig = Swal.fire.bind(Swal);
     Swal.fire = function(opts){
-      if (opts && opts.toast) return _orig(opts); // don't touch toasts
+      if (opts && opts.toast) return _orig;
       return _orig(Object.assign({ showCancelButton: true, cancelButtonText: 'Cancel' }, opts || {}));
     };
   }
 </script>
 
-<!-- Pass role -->
-<script>
-  window.ADMIN_ROLE = {{ (admin_role or '')|tojson|safe }};
-</script>
+<!-- Pass role to JavaScript -->
+<script> window.ADMIN_ROLE = {{ (admin_role or '')|tojson|safe }}; </script>
 
 <!-- External page script -->
-<script src="{{ url_for('static', filename='js/newadmin.js') }}?v=1.3.6"></script>
+<script src="{{ url_for('static', filename='js/newadmin.js') }}?v=1.4.0"></script>
+
+<!-- Pager (same logic as in admin_logs.html but linked to DataTables) -->
+<script>
+(function () {
+  // Wait until DataTable in newadmin.js is initialized
+  document.addEventListener('DOMContentLoaded', function(){
+    let tries = 0;
+    (function waitForDT(){
+      tries++;
+      if (!window.jQuery) return;
+      const $ = window.jQuery;
+      const isReady = $.fn.dataTable && $.fn.dataTable.isDataTable('#usersTable');
+      if (!isReady) { if (tries < 40) return setTimeout(waitForDT, 100); else return; }
+
+      const dt = $('#usersTable').DataTable();
+      const pager = document.getElementById('pager');
+
+      function createItem(label, page, disabled=false, active=false){
+        const li = document.createElement('li');
+        li.className = `page-item ${disabled ? 'disabled' : ''} ${active ? 'active' : ''}`;
+        const a = document.createElement('a');
+        a.className = 'page-link';
+        a.href = '#';
+        a.textContent = label;
+        a.onclick = (e) => {
+          e.preventDefault();
+          if (disabled || active) return;
+          dt.page(page).draw('page');
+        };
+        li.appendChild(a);
+        return li;
+      }
+
+      function renderPager(){
+        const info = dt.page.info(); // {page, pages, ...}
+        const cp = info.page + 1;    // 1-based
+        const tp = Math.max(1, info.pages);
+
+        pager.innerHTML = '';
+        pager.appendChild(createItem('«', info.page - 1, cp === 1));
+        const start = Math.max(1, cp - 2);
+        const end   = Math.min(tp, cp + 2);
+        for (let i=start; i<=end; i++){
+          pager.appendChild(createItem(String(i), i-1, false, i===cp));
+        }
+        pager.appendChild(createItem('»', info.page + 1, cp === tp));
+      }
+
+      // Render once and on every table draw
+      renderPager();
+      dt.on('draw', renderPager);
+    })();
+  });
+})();
+</script>
 
 {% endblock %}
